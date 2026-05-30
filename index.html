@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Time-of-Day Timestamp Logger</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color-scheme: light;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #f5f5f5;
+      color: #111;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 4px 0 10px;
+    }
+    .clock {
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(42px, 12vw, 86px);
+      font-weight: 800;
+      letter-spacing: -2px;
+      background: white;
+      border-radius: 16px;
+      padding: 18px 12px;
+      text-align: center;
+      box-shadow: 0 1px 6px rgba(0,0,0,.12);
+      margin-bottom: 14px;
+    }
+    .date {
+      text-align: center;
+      font-size: 15px;
+      color: #555;
+      margin-top: -6px;
+      margin-bottom: 12px;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      margin: 12px 0 5px;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 22px;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid #bbb;
+      background: white;
+    }
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 24px 10px;
+      font-size: 26px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    }
+    .start { background: #d9f7d9; }
+    .finish { background: #ffe0e0; }
+    .smallrow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 8px 0 12px;
+    }
+    .small {
+      font-size: 15px;
+      font-weight: 700;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid #ccc;
+    }
+    .danger {
+      background: #fff3cd;
+    }
+    .tablewrap {
+      overflow-x: auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.12);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    th {
+      background: #fafafa;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #555;
+    }
+    .hint {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.35;
+      margin: 12px 0;
+    }
+    .last {
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 18px;
+      font-weight: 700;
+      margin: 10px 0;
+      box-shadow: 0 1px 6px rgba(0,0,0,.10);
+    }
+    @media (max-width: 520px) {
+      body { padding: 10px; }
+      .buttons { gap: 8px; }
+      button { font-size: 23px; padding: 24px 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Time-of-Day Timestamp Logger</h1>
+    <div id="clock" class="clock">--:--:--.--</div>
+    <div id="date" class="date"></div>
+
+    <label for="operator">Operator / Station</label>
+    <input id="operator" placeholder="Example: Start 1, Finish 2, Matt">
+
+    <label for="athlete">Athlete / Bib / Lane</label>
+    <input id="athlete" inputmode="text" placeholder="Example: 214">
+
+    <label for="note">Optional note</label>
+    <input id="note" placeholder="Example: heat 3, false start, unclear ID">
+
+    <div class="buttons">
+      <button class="start" onclick="logStamp('START')">START</button>
+      <button class="finish" onclick="logStamp('FINISH')">FINISH</button>
+    </div>
+
+    <div id="last" class="last">No timestamps yet.</div>
+
+    <div class="smallrow">
+      <button class="small" onclick="copyCSV()">Copy CSV</button>
+      <button class="small" onclick="downloadCSV()">Download CSV</button>
+      <button class="small" onclick="undoLast()">Undo Last</button>
+      <button class="small danger" onclick="clearAll()">Clear All</button>
+    </div>
+
+    <p class="hint">
+      This logs the phone’s local time-of-day instantly when the button is pressed. It does not need internet once opened.
+      Before the event, make sure every phone has automatic date/time enabled.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Type</th>
+            <th>Time</th>
+            <th>Date</th>
+            <th>Athlete</th>
+            <th>Operator</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+  const KEY = "tod_timestamp_logger_v1";
+  let logs = JSON.parse(localStorage.getItem(KEY) || "[]");
+
+  function pad(n, len=2) { return String(n).padStart(len, "0"); }
+
+  function formatStamp(d) {
+    const hundredths = Math.floor(d.getMilliseconds() / 10);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(hundredths)}`;
+  }
+
+  function formatDate(d) {
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  function tick() {
+    const now = new Date();
+    document.getElementById("clock").textContent = formatStamp(now);
+    document.getElementById("date").textContent = formatDate(now);
+    requestAnimationFrame(tick);
+  }
+
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify(logs));
+  }
+
+  function logStamp(type) {
+    const now = new Date();
+    const rec = {
+      n: logs.length + 1,
+      type,
+      time: formatStamp(now),
+      date: formatDate(now),
+      iso: now.toISOString(),
+      epoch_ms: now.getTime(),
+      athlete: document.getElementById("athlete").value.trim(),
+      operator: document.getElementById("operator").value.trim(),
+      note: document.getElementById("note").value.trim()
+    };
+    logs.push(rec);
+    save();
+    render();
+    document.getElementById("last").textContent =
+      `${type} recorded: ${rec.time} — Athlete: ${rec.athlete || "(blank)"}`;
+    if (navigator.vibrate) navigator.vibrate(35);
+  }
+
+  function render() {
+    const tbody = document.getElementById("rows");
+    tbody.innerHTML = "";
+    logs.slice().reverse().forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(r.n)}</td>
+        <td>${escapeHtml(r.type)}</td>
+        <td>${escapeHtml(r.time)}</td>
+        <td>${escapeHtml(r.date)}</td>
+        <td>${escapeHtml(r.athlete)}</td>
+        <td>${escapeHtml(r.operator)}</td>
+        <td>${escapeHtml(r.note)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+    }[c]));
+  }
+
+  function csvText() {
+    const header = ["n","type","date","time","iso","epoch_ms","athlete","operator","note"];
+    const lines = [header.join(",")];
+    logs.forEach(r => {
+      lines.push(header.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(","));
+    });
+    return lines.join("\n");
+  }
+
+  async function copyCSV() {
+    const text = csvText();
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("CSV copied. Paste it into Google Sheets or Excel.");
+    } catch (e) {
+      prompt("Copy this CSV:", text);
+    }
+  }
+
+  function downloadCSV() {
+    const blob = new Blob([csvText()], {type: "text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const today = formatDate(new Date());
+    a.href = url;
+    a.download = `timestamps-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function undoLast() {
+    if (!logs.length) return;
+    const r = logs.pop();
+    save();
+    render();
+    document.getElementById("last").textContent = `Undid: ${r.type} ${r.time}`;
+  }
+
+  function clearAll() {
+    if (!confirm("Clear all timestamps on this phone?")) return;
+    logs = [];
+    save();
+    render();
+    document.getElementById("last").textContent = "Cleared.";
+  }
+
+  tick();
+  render();
+</script>
+</body>
+</html>
