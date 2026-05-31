@@ -2,8 +2,9 @@ const ROOM_KEY = 'ttt_room_code';
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes O/0 and I/1 to avoid confusion
 
 let currentRoom = null;
+let currentRoomName = '';
 let stamps = [];
-let lastAddedKey = null;
+let editingKey = null;
 
 // ── Utility ────────────────────────────────────────────────────────────────
 
@@ -36,10 +37,8 @@ function tick() {
   const now = new Date();
   const t = formatStamp(now);
   const d = formatDate(now);
-  const lobbyEl = document.getElementById('clock-lobby');
-  const timerEl = document.getElementById('clock');
+  const timerEl = document.getElementById('clock-time');
   const dateEl = document.getElementById('date');
-  if (lobbyEl) lobbyEl.textContent = t;
   if (timerEl) timerEl.textContent = t;
   if (dateEl) dateEl.textContent = d;
   requestAnimationFrame(tick);
@@ -63,10 +62,19 @@ function goToLobby() {
   showScreen('screen-lobby');
 }
 
-function goToTimer(code) {
+function updateBadge(name, code) {
+  const badge = document.getElementById('room-badge');
+  badge.innerHTML = name
+    ? `${escapeHtml(name)} <span class="badge-code">${code}</span>`
+    : code;
+}
+
+function goToTimer(code, name = '') {
   currentRoom = code;
+  currentRoomName = name;
   localStorage.setItem(ROOM_KEY, code);
-  document.getElementById('room-badge').textContent = `Room: ${code}`;
+  ensureRoomIndexed(code);
+  updateBadge(name, code);
   document.getElementById('deleted-banner').classList.add('hidden');
   hideMenu();
   showScreen('screen-timer');
@@ -86,9 +94,11 @@ function subscribeToRoom(code) {
 
   db.ref(`rooms/${code}/stamps`).on('value', snap => {
     stamps = [];
-    snap.forEach(child => stamps.push({ _key: child.key, ...child.val() }));
+    snap.forEach(child => { stamps.push({ _key: child.key, ...child.val() }); });
     stamps.sort((a, b) => a.epoch_ms - b.epoch_ms);
     render();
+    renderActiveRacers();
+    updateFinishBtn();
   });
 
   db.ref(`rooms/${code}/meta/deleted`).on('value', snap => {
@@ -96,12 +106,54 @@ function subscribeToRoom(code) {
   });
 }
 
+// ── Room index (lobby list) ────────────────────────────────────────────────
+
+function ensureRoomIndexed(code) {
+  db.ref(`roomIndex/${code}`).once('value').then(snap => {
+    if (snap.exists()) return;
+    db.ref(`rooms/${code}/meta`).get().then(metaSnap => {
+      if (!metaSnap.exists() || metaSnap.val().deleted) return;
+      const { name = code, createdAt = Date.now() } = metaSnap.val();
+      db.ref(`roomIndex/${code}`).set({ name, createdAt, deleted: false });
+    });
+  });
+}
+
+function subscribeToRoomIndex() {
+  db.ref('roomIndex').on('value', snap => {
+    const rooms = [];
+    snap.forEach(child => {
+      const r = child.val();
+      if (!r.deleted) rooms.push({ code: child.key, ...r });
+    });
+    rooms.sort((a, b) => b.createdAt - a.createdAt);
+    renderRoomList(rooms);
+  });
+}
+
+function renderRoomList(rooms) {
+  const el = document.getElementById('room-list');
+  if (!el) return;
+  if (!rooms.length) {
+    el.innerHTML = '<p class="no-rooms">No active rooms yet.</p>';
+    return;
+  }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-list-item">
+      <span class="room-list-name">${escapeHtml(r.name)}</span>
+    </div>
+  `).join('');
+}
+
 // ── Room actions ───────────────────────────────────────────────────────────
 
 function createRoom() {
+  const name = document.getElementById('room-name').value.trim() || 'Unnamed Room';
   const code = generateCode();
-  db.ref(`rooms/${code}/meta`).set({ createdAt: Date.now(), deleted: false })
-    .then(() => goToTimer(code))
+  const meta = { name, createdAt: Date.now(), deleted: false };
+  db.ref(`rooms/${code}/meta`).set(meta)
+    .then(() => db.ref(`roomIndex/${code}`).set({ name, createdAt: meta.createdAt, deleted: false }))
+    .then(() => goToTimer(code, name))
     .catch(err => alert('Could not create room: ' + err.message));
 }
 
@@ -118,7 +170,7 @@ function joinRoomFromInput() {
         return;
       }
       if (snap.val()?.deleted) { alert(`Room "${raw}" has been deleted.`); return; }
-      goToTimer(raw);
+      goToTimer(raw, snap.val()?.name || '');
     })
     .catch(() => {
       // Network error — allow re-joining a previously saved room
@@ -129,8 +181,35 @@ function joinRoomFromInput() {
 
 // ── Menu ───────────────────────────────────────────────────────────────────
 
-function toggleMenu() { document.getElementById('room-menu').classList.toggle('hidden'); }
-function hideMenu() { document.getElementById('room-menu').classList.add('hidden'); }
+function toggleMenu() {
+  document.querySelector('.menu-wrapper').classList.toggle('is-open');
+}
+
+function hideMenu() {
+  document.querySelector('.menu-wrapper').classList.remove('is-open');
+  document.getElementById('rename-section').classList.add('hidden');
+}
+
+function toggleRenameField() {
+  const section = document.getElementById('rename-section');
+  const isHidden = section.classList.toggle('hidden');
+  if (!isHidden) {
+    const input = document.getElementById('rename-input');
+    input.value = currentRoomName;
+    input.focus();
+    input.select();
+  }
+}
+
+function saveRoomName() {
+  const name = document.getElementById('rename-input').value.trim();
+  if (!name || !currentRoom) return;
+  currentRoomName = name;
+  db.ref(`rooms/${currentRoom}/meta/name`).set(name);
+  db.ref(`roomIndex/${currentRoom}/name`).set(name);
+  updateBadge(name, currentRoom);
+  hideMenu();
+}
 
 function leaveRoom() {
   hideMenu();
@@ -140,10 +219,15 @@ function leaveRoom() {
 
 function deleteRoom() {
   hideMenu();
-  if (!confirm(`Delete room "${currentRoom}"?\n\nThis removes all timestamps for everyone in the room.`)) return;
+  const code = currentRoom;
+  if (!confirm(`Delete room "${code}"?\n\nThis removes all timestamps for everyone in the room.`)) return;
 
-  db.ref(`rooms/${currentRoom}/meta/deleted`).set(true).then(() => {
-    setTimeout(() => db.ref(`rooms/${currentRoom}`).remove(), 3000);
+  db.ref(`rooms/${code}/meta/deleted`).set(true).then(() => {
+    db.ref(`roomIndex/${code}/deleted`).set(true);
+    setTimeout(() => {
+      db.ref(`rooms/${code}`).remove();
+      db.ref(`roomIndex/${code}`).remove();
+    }, 3000);
   });
 
   localStorage.removeItem(ROOM_KEY);
@@ -174,18 +258,50 @@ function logStamp(type) {
     note: document.getElementById('note').value.trim()
   };
   const ref = db.ref(`rooms/${currentRoom}/stamps`).push();
-  lastAddedKey = ref.key;
   ref.set(rec);
-  document.getElementById('last').textContent =
-    `${type} recorded: ${rec.time} — Athlete: ${rec.athlete || '(blank)'}`;
+  document.getElementById('last').innerHTML =
+    `<span class="last-time">${rec.time}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
   if (navigator.vibrate) navigator.vibrate(35);
 }
 
-function undoLast() {
-  if (!lastAddedKey || !currentRoom) return;
-  db.ref(`rooms/${currentRoom}/stamps/${lastAddedKey}`).remove().then(() => {
-    document.getElementById('last').textContent = 'Last stamp removed.';
-    lastAddedKey = null;
+// ── Finish button state ─────────────────────────────────────────────────────
+
+function updateFinishBtn() {
+  const athlete = document.getElementById('athlete').value.trim();
+  const btn = document.querySelector('.finish');
+  const hasStarted = !athlete || stamps.some(s => s.type === 'START' && s.athlete === athlete);
+  btn.disabled = !hasStarted;
+}
+
+// ── Active racers ───────────────────────────────────────────────────────────
+
+function renderActiveRacers() {
+  const el = document.getElementById('active-racers');
+  if (!el) return;
+
+  // stamps are already sorted by epoch_ms ascending, so last write wins
+  const lastType = {};
+  stamps.forEach(s => {
+    if (!s.athlete) return;
+    lastType[s.athlete] = s.type;
+  });
+
+  const active = Object.entries(lastType)
+    .filter(([, type]) => type === 'START')
+    .map(([athlete]) => athlete);
+
+  if (!active.length) {
+    el.classList.add('hidden');
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = active.map(a => `<span class="active-racer-name" data-athlete="${escapeHtml(a)}">${escapeHtml(a)}</span>`).join(' · ');
+  el.querySelectorAll('.active-racer-name').forEach(span => {
+    span.onclick = () => {
+      document.getElementById('athlete').value = span.dataset.athlete;
+      updateFinishBtn();
+    };
   });
 }
 
@@ -198,8 +314,10 @@ function render() {
   stamps.slice().reverse().forEach((r, i) => {
     const n = stamps.length - i;
     const tr = document.createElement('tr');
+    tr.className = 'row-clickable';
+    tr.onclick = () => openEditSheet(r._key);
     tr.innerHTML = `
-      <td>${n}</td>
+      <td>${n}${r.editedAt ? '<span class="edited-dot"></span>' : ''}</td>
       <td>${escapeHtml(r.type)}</td>
       <td>${escapeHtml(r.time)}</td>
       <td>${escapeHtml(r.date)}</td>
@@ -243,23 +361,77 @@ function downloadCSV() {
   URL.revokeObjectURL(url);
 }
 
+// ── Edit sheet ─────────────────────────────────────────────────────────────
+
+function openEditSheet(key) {
+  const stamp = stamps.find(s => s._key === key);
+  if (!stamp) return;
+  editingKey = key;
+  document.getElementById('edit-sheet-title').textContent = `${stamp.type} · ${stamp.time}`;
+  document.getElementById('edit-athlete').value = stamp.athlete || '';
+  document.getElementById('edit-operator').value = stamp.operator || '';
+  document.getElementById('edit-note').value = stamp.note || '';
+  document.getElementById('edit-overlay').classList.remove('hidden');
+  document.getElementById('edit-sheet').classList.remove('hidden');
+  document.getElementById('edit-note').focus();
+}
+
+function closeEditSheet() {
+  editingKey = null;
+  document.getElementById('edit-overlay').classList.add('hidden');
+  document.getElementById('edit-sheet').classList.add('hidden');
+}
+
+function saveEdit() {
+  if (!editingKey || !currentRoom) return;
+  const updates = {
+    athlete:  document.getElementById('edit-athlete').value.trim(),
+    operator: document.getElementById('edit-operator').value.trim(),
+    note:     document.getElementById('edit-note').value.trim(),
+    editedAt: Date.now(),
+  };
+  db.ref(`rooms/${currentRoom}/stamps/${editingKey}`).update(updates);
+  closeEditSheet();
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 
 (function init() {
   tick();
+  subscribeToRoomIndex();
   const saved = localStorage.getItem(ROOM_KEY);
-  if (saved) document.getElementById('join-code').value = saved;
+  if (saved) {
+    document.getElementById('join-code').value = saved;
+    ensureRoomIndexed(saved);
+  }
   showScreen('screen-lobby');
 
   // Close menu on outside click
   document.addEventListener('click', e => {
-    const menu = document.getElementById('room-menu');
-    const btn = document.querySelector('.menu-btn');
-    if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) hideMenu();
+    const wrapper = document.querySelector('.menu-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) hideMenu();
   });
+
 
   // Allow pressing Enter to join
   document.getElementById('join-code').addEventListener('keydown', e => {
     if (e.key === 'Enter') joinRoomFromInput();
+  });
+
+  // Allow pressing Enter to save room rename
+  document.getElementById('rename-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveRoomName();
+  });
+
+  document.getElementById('athlete').addEventListener('input', updateFinishBtn);
+
+  // Stamp buttons: fire on release, primary pointer only, no context menu
+  [['start', 'START'], ['finish', 'FINISH']].forEach(([cls, type]) => {
+    const btn = document.querySelector(`.${cls}`);
+    btn.addEventListener('pointerdown',  e => { if (e.isPrimary && !btn.disabled) btn.classList.add('is-pressed'); });
+    btn.addEventListener('pointerup',    e => { btn.classList.remove('is-pressed'); if (e.isPrimary && e.button === 0 && !btn.disabled) logStamp(type); });
+    btn.addEventListener('pointercancel',() => btn.classList.remove('is-pressed'));
+    btn.addEventListener('pointerleave', () => btn.classList.remove('is-pressed'));
+    btn.addEventListener('contextmenu',  e => e.preventDefault());
   });
 })();

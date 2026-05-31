@@ -1,107 +1,153 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Time Trial Timer</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Time Trial Timer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- LOBBY -->
+    <div id="screen-lobby" class="screen">
+      <div class="wrap">
+        <input
+          id="room-name"
+          class="room-name-input"
+          maxlength="40"
+          placeholder="Room name (e.g. Sprint Heat 3)"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn-create" onclick="createRoom()">Create Room</button>
 
-  <!-- LOBBY -->
-  <div id="screen-lobby" class="screen">
-    <div class="wrap">
-      <h1>Time Trial Timer</h1>
-      <div id="clock-lobby" class="clock">--:--:--.--</div>
-
-      <button class="btn-create" onclick="createRoom()">Create Room</button>
-
-      <div class="lobby-divider">or join existing</div>
-
-      <div class="lobby-section">
-        <input id="join-code" class="code-input" maxlength="4" placeholder="CODE"
-               autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false">
-        <button class="btn-join" onclick="joinRoomFromInput()">Join</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- TIMER -->
-  <div id="screen-timer" class="screen hidden">
-    <div class="wrap">
-
-      <div class="header-row">
-        <div>
-          <h1>Time Trial Timer</h1>
-          <div id="room-badge" class="room-badge"></div>
+        <div class="lobby-live-rooms">
+          <div class="lobby-live-title">
+            <span class="live-dot"></span> Live rooms
+          </div>
+          <div id="room-list" class="room-list"></div>
         </div>
-        <button class="menu-btn" onclick="toggleMenu()">⋮</button>
+
+        <div class="lobby-divider">or join with code</div>
+
+        <div class="lobby-section">
+          <input
+            id="join-code"
+            class="code-input"
+            maxlength="4"
+            placeholder="CODE"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="characters"
+            spellcheck="false"
+          />
+          <button class="btn-join" onclick="joinRoomFromInput()">Join</button>
+        </div>
       </div>
-
-      <div id="room-menu" class="room-menu hidden">
-        <button onclick="leaveRoom()">Leave Room</button>
-        <button class="danger" onclick="deleteRoom()">Delete Room</button>
-      </div>
-
-      <div id="deleted-banner" class="deleted-banner hidden">
-        <strong>This room was deleted.</strong>
-        <button onclick="downloadCSV()">Export CSV</button>
-        <button onclick="goToLobby()">Back to Lobby</button>
-      </div>
-
-      <div id="clock" class="clock">--:--:--.--</div>
-      <div id="date" class="date"></div>
-
-      <label for="operator">Operator / Station</label>
-      <input id="operator" placeholder="Example: Start 1, Finish 2, Matt">
-
-      <label for="athlete">Athlete / Bib / Lane</label>
-      <input id="athlete" inputmode="text" placeholder="Example: 214">
-
-      <label for="note">Optional note</label>
-      <input id="note" placeholder="Example: heat 3, false start, unclear ID">
-
-      <div class="buttons">
-        <button class="start" onclick="logStamp('START')">START</button>
-        <button class="finish" onclick="logStamp('FINISH')">FINISH</button>
-      </div>
-
-      <div id="last" class="last">No timestamps yet.</div>
-
-      <div class="smallrow">
-        <button class="small" onclick="copyCSV()">Copy CSV</button>
-        <button class="small" onclick="downloadCSV()">Download CSV</button>
-        <button class="small" onclick="undoLast()">Undo Last</button>
-      </div>
-
-      <p class="hint">
-        Logs local time-of-day instantly when pressed. Works offline — syncs automatically when connection returns.
-        Before the event, ensure every phone has automatic date/time enabled.
-      </p>
-
-      <div class="tablewrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Type</th>
-              <th>Time</th>
-              <th>Date</th>
-              <th>Athlete</th>
-              <th>Operator</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
     </div>
-  </div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase.js"></script>
-  <script src="app.js"></script>
-</body>
+    <!-- TIMER -->
+    <div id="screen-timer" class="screen hidden">
+      <div class="wrap">
+        <div class="header-row">
+          <div id="room-badge" class="room-badge"></div>
+          <div class="menu-wrapper">
+            <button class="menu-btn" onclick="toggleMenu()">⋮</button>
+            <div id="room-menu" class="room-menu">
+              <div class="menu-top">
+                <span class="menu-label">Options</span>
+                <button class="menu-close-btn" onclick="hideMenu()">✕</button>
+              </div>
+              <button class="menu-item" onclick="downloadCSV()">Download CSV</button>
+              <button class="menu-item" onclick="toggleRenameField()">Rename Room</button>
+              <div id="rename-section" class="rename-section hidden">
+                <input id="rename-input" maxlength="40" placeholder="New room name" />
+                <button class="rename-save" onclick="saveRoomName()">Save</button>
+              </div>
+              <button class="menu-item" onclick="leaveRoom()">Leave Room</button>
+              <button class="menu-item danger" onclick="deleteRoom()">Delete Room</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="deleted-banner" class="deleted-banner hidden">
+          <strong>This room was deleted.</strong>
+          <button onclick="downloadCSV()">Export CSV</button>
+          <button onclick="goToLobby()">Back to Lobby</button>
+        </div>
+
+        <div id="clock" class="clock">
+          <span id="clock-time">--:--:--.--</span>
+          <div id="active-racers" class="active-racers hidden"></div>
+        </div>
+
+        <label for="operator">Operator / Station</label>
+        <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
+
+        <label for="athlete">Athlete</label>
+        <input id="athlete" inputmode="text" placeholder="Example: 214" />
+
+        <label for="note">Note</label>
+        <input
+          id="note"
+          placeholder="Example: heat 3, false start, unclear ID"
+        />
+
+        <div class="buttons">
+          <button class="start">START</button>
+          <button class="finish">FINISH</button>
+        </div>
+
+        <div id="last" class="last">No timestamps yet.</div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Type</th>
+                <th>Time</th>
+                <th>Date</th>
+                <th>Athlete</th>
+                <th>Operator</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- EDIT SHEET -->
+    <div
+      id="edit-overlay"
+      class="edit-overlay hidden"
+      onclick="closeEditSheet()"
+    ></div>
+    <div id="edit-sheet" class="edit-sheet hidden">
+      <div class="edit-sheet-handle"></div>
+      <div class="edit-sheet-header">
+        <span id="edit-sheet-title" class="edit-sheet-title"></span>
+        <button class="edit-sheet-close" onclick="closeEditSheet()">✕</button>
+      </div>
+      <label for="edit-athlete">Athlete</label>
+      <input id="edit-athlete" inputmode="text" />
+      <label for="edit-operator">Operator</label>
+      <input id="edit-operator" />
+      <label for="edit-note">Note</label>
+      <input id="edit-note" />
+      <div class="edit-sheet-actions">
+        <button class="edit-cancel" onclick="closeEditSheet()">Cancel</button>
+        <button class="edit-save" onclick="saveEdit()">Save</button>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="firebase.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>
