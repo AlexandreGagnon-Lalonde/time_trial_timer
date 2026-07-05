@@ -595,6 +595,31 @@ button.is-pressed {
   border-radius: var(--radius-md);
 }
 
+/* Timer screen: pin the controls and let only the table scroll, instead of
+   the whole page. body has 40px top + 40px bottom padding (see `body`). */
+#screen-timer:not(.hidden) .wrap {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 80px);
+}
+
+#screen-timer:not(.hidden) .wrap > *:not(.tablewrap) {
+  flex-shrink: 0;
+}
+
+#screen-timer:not(.hidden) .tablewrap {
+  flex: 1 1 auto;
+  min-height: 0; /* let the flex child shrink so its own overflow scrolls */
+  overflow-y: auto;
+}
+
+/* Keep column headers visible while the body scrolls */
+#screen-timer thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
