@@ -373,6 +373,7 @@ function openEditSheet(key) {
   document.getElementById('edit-note').value = stamp.note || '';
   document.getElementById('edit-overlay').classList.remove('hidden');
   document.getElementById('edit-sheet').classList.remove('hidden');
+  bindKeyboardTracking();
   document.getElementById('edit-note').focus();
 }
 
@@ -380,6 +381,33 @@ function closeEditSheet() {
   editingKey = null;
   document.getElementById('edit-overlay').classList.add('hidden');
   document.getElementById('edit-sheet').classList.add('hidden');
+  unbindKeyboardTracking();
+}
+
+// Lift the edit sheet above the on-screen keyboard. On mobile (notably iOS
+// Safari) the keyboard overlays the viewport instead of resizing it, so a
+// `bottom: 0` fixed element ends up hidden behind it. The VisualViewport API
+// reports the un-obscured area; translate the sheet up by the covered height.
+function updateSheetForKeyboard() {
+  const vv = window.visualViewport;
+  const sheet = document.getElementById('edit-sheet');
+  if (!vv || !sheet) return;
+  const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  sheet.style.transform = keyboardHeight ? `translateY(-${keyboardHeight}px)` : '';
+}
+
+function bindKeyboardTracking() {
+  if (!window.visualViewport) return;
+  window.visualViewport.addEventListener('resize', updateSheetForKeyboard);
+  window.visualViewport.addEventListener('scroll', updateSheetForKeyboard);
+}
+
+function unbindKeyboardTracking() {
+  const sheet = document.getElementById('edit-sheet');
+  if (sheet) sheet.style.transform = '';
+  if (!window.visualViewport) return;
+  window.visualViewport.removeEventListener('resize', updateSheetForKeyboard);
+  window.visualViewport.removeEventListener('scroll', updateSheetForKeyboard);
 }
 
 function saveEdit() {

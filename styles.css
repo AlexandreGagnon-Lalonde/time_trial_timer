@@ -463,6 +463,12 @@ button {
   transition:
     opacity 0.1s,
     transform 0.08s;
+  /* Stop iOS long-press from selecting the label / showing the callout,
+     which otherwise cancels the tap instead of firing the button. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button.is-pressed {
@@ -619,6 +625,7 @@ th {
   padding: 12px 20px 40px;
   z-index: 101;
   box-shadow: 0 -4px 24px rgba(26, 24, 23, 0.15);
+  transition: transform 0.2s ease;
 }
 
 .edit-sheet-handle {
