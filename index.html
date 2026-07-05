@@ -10,6 +10,16 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- In-app browser warning (Messenger / Instagram / Facebook webviews) -->
+    <div id="inapp-banner" class="inapp-banner hidden">
+      <span class="inapp-banner-text">
+        For buttons and the keyboard to work correctly, open this page in your
+        browser: tap the <strong>•••</strong> menu, then <strong>Open in
+        browser</strong> (Safari / Chrome).
+      </span>
+      <button class="inapp-banner-close" onclick="dismissInAppBanner()">✕</button>
+    </div>
+
     <!-- LOBBY -->
     <div id="screen-lobby" class="screen">
       <div class="wrap">

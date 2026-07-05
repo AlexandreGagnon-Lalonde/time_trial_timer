@@ -1,3 +1,42 @@
+/* ── In-app browser banner ─────────────────────────────────────────────── */
+.inapp-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #2e2a27;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.inapp-banner.hidden {
+  display: none;
+}
+
+.inapp-banner-text {
+  flex: 1;
+}
+
+.inapp-banner-text strong {
+  color: #f5c99b;
+}
+
+.inapp-banner-close {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border: 0;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+}
+
 :root {
   --bg: #faf9f7;
   --surface: #ffffff;

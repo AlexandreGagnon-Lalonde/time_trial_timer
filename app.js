@@ -6,6 +6,28 @@ let currentRoomName = '';
 let stamps = [];
 let editingKey = null;
 
+// ── In-app browser detection ────────────────────────────────────────────────
+// Messenger/Instagram/Facebook webviews (WKWebView) don't reliably honor
+// text-selection suppression or fire VisualViewport keyboard events, so
+// buttons select text and the edit sheet won't lift. Nudge users to open the
+// page in a real browser, where the fixes work.
+function isInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|MicroMessenger|Twitter/i.test(ua);
+}
+
+function dismissInAppBanner() {
+  const banner = document.getElementById('inapp-banner');
+  if (banner) banner.classList.add('hidden');
+}
+
+if (isInAppBrowser()) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const banner = document.getElementById('inapp-banner');
+    if (banner) banner.classList.remove('hidden');
+  });
+}
+
 // ── Utility ────────────────────────────────────────────────────────────────
 
 function pad(n, len = 2) { return String(n).padStart(len, '0'); }
