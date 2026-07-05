@@ -98,9 +98,9 @@ h1 {
   background: var(--surface-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 8px 12px;
+  padding: 6px 12px;
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   color: var(--text);
 }
 
@@ -459,7 +459,7 @@ label {
   display: block;
   font-size: 12px;
   font-weight: 700;
-  margin: 14px 0 5px;
+  margin: 8px 0 3px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -468,8 +468,8 @@ label {
 input {
   width: 100%;
   box-sizing: border-box;
-  font-size: 18px;
-  padding: 13px 14px;
+  font-size: 16px;
+  padding: 9px 12px;
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border);
   background: var(--surface);
@@ -488,13 +488,13 @@ input:focus {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin: 12px 0;
+  margin: 8px 0;
 }
 
 button {
   border: 0;
   border-radius: var(--radius-lg);
-  padding: 26px 10px;
+  padding: 18px 10px;
   font-size: 24px;
   font-weight: 900;
   cursor: pointer;
@@ -564,8 +564,8 @@ button.is-pressed {
   background: var(--surface-alt);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 8px 12px;
-  margin: 0 0 16px;
+  padding: 6px 10px;
+  margin: 0 0 8px;
   display: flex;
   flex-direction: row;
   align-items: baseline;
@@ -590,7 +590,7 @@ button.is-pressed {
 /* ── Table ─────────────────────────────────────────────────────────────── */
 .tablewrap {
   overflow-x: auto;
-  margin-top: 16px;
+  margin-top: 10px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -629,7 +629,7 @@ table {
 
 th,
 td {
-  padding: 10px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
