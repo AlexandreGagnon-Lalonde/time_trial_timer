@@ -67,7 +67,7 @@
 
 body {
   margin: 0;
-  padding: 40px 16px 40px;
+  padding: 14px 16px;
   background: var(--bg);
   color: var(--text);
 }
@@ -601,7 +601,7 @@ button.is-pressed {
 #screen-timer:not(.hidden) .wrap {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 80px);
+  height: calc(100dvh - 28px); /* body has 14px top + 14px bottom padding */
 }
 
 #screen-timer:not(.hidden) .wrap > *:not(.tablewrap) {
