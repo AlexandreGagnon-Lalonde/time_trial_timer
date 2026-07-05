@@ -590,6 +590,7 @@ button.is-pressed {
 /* ── Table ─────────────────────────────────────────────────────────────── */
 .tablewrap {
   overflow-x: auto;
+  margin-top: 16px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
