@@ -41,6 +41,13 @@ function formatDate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Local date + time with millisecond precision: YYYY-MM-DD HH:MM:SS:XXX
+function formatDateTimeMs(ms) {
+  if (typeof ms !== 'number') return '';
+  const d = new Date(ms);
+  return `${formatDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
+}
+
 // Elapsed duration as M:SS.xx (or H:MM:SS.xx past an hour)
 function formatElapsed(ms) {
   if (!(ms >= 0)) return '—';
@@ -387,12 +394,29 @@ function render() {
 // ── CSV ────────────────────────────────────────────────────────────────────
 
 function csvText() {
-  const header = ['n', 'type', 'date', 'time', 'iso', 'epoch_ms', 'athlete', 'operator', 'note'];
+  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = ['n', 'type', 'date', 'time', 'iso', 'datetime_ms', 'epoch_ms', 'athlete', 'operator', 'note'];
   const lines = [header.join(',')];
   stamps.forEach((r, i) => {
-    const row = { ...r, n: i + 1 };
-    lines.push(header.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','));
+    const row = { ...r, n: i + 1, datetime_ms: formatDateTimeMs(r.epoch_ms) };
+    lines.push(header.map(k => esc(row[k])).join(','));
   });
+
+  // Second section: finished athletes with their finish (elapsed) time
+  const finished = getFinishedAthletes();
+  if (finished.length) {
+    lines.push('');
+    lines.push('Finished Athletes');
+    lines.push(['athlete', 'start', 'finish', 'elapsed'].join(','));
+    finished.forEach(f => {
+      lines.push([
+        esc(f.athlete),
+        esc(formatDateTimeMs(f.startMs)),
+        esc(formatDateTimeMs(f.finishMs)),
+        esc(formatElapsed(f.elapsedMs)),
+      ].join(','));
+    });
+  }
   return lines.join('\n');
 }
 
