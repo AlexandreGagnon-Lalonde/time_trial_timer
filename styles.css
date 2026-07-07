@@ -128,11 +128,13 @@ h1 {
 }
 
 .hold-overlay.start {
-  background: var(--start);
+  background: var(--start-light);
+  color: var(--start);
 }
 
 .hold-overlay.finish {
-  background: var(--finish);
+  background: var(--finish-light);
+  color: var(--finish);
 }
 
 .hold-label {
