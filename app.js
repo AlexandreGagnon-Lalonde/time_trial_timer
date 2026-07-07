@@ -45,7 +45,14 @@ function formatDate(d) {
 function formatDateTimeMs(ms) {
   if (typeof ms !== 'number') return '';
   const d = new Date(ms);
-  return `${formatDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
+  return `${formatDate(d)} ${formatTimeMs(ms)}`;
+}
+
+// Local time with millisecond precision: HH:MM:SS:XXX
+function formatTimeMs(ms) {
+  if (typeof ms !== 'number') return '';
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
 }
 
 // Elapsed duration as M:SS.xx (or H:MM:SS.xx past an hour)
@@ -395,21 +402,23 @@ function render() {
 
 function csvText() {
   const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const header = ['n', 'type', 'date', 'time', 'iso', 'datetime_ms', 'epoch_ms', 'athlete', 'operator', 'note'];
+  const header = ['n', 'type', 'date', 'time', 'iso', 'time_ms', 'epoch_ms', 'athlete', 'operator', 'note'];
   const lines = [header.join(',')];
   stamps.forEach((r, i) => {
-    const row = { ...r, n: i + 1, datetime_ms: formatDateTimeMs(r.epoch_ms) };
+    const row = { ...r, n: i + 1, time_ms: formatTimeMs(r.epoch_ms) };
     lines.push(header.map(k => esc(row[k])).join(','));
   });
 
-  // Second section: finished athletes with their finish (elapsed) time
+  // Second section: finished athletes with their finish (elapsed) time,
+  // offset to begin on the 4th column so it sits clear of the main table.
   const finished = getFinishedAthletes();
   if (finished.length) {
+    const indent = ',,,';
     lines.push('');
-    lines.push('Finished Athletes');
-    lines.push(['athlete', 'start', 'finish', 'elapsed'].join(','));
+    lines.push(indent + 'Finished Athletes');
+    lines.push(indent + ['athlete', 'start', 'finish', 'elapsed'].join(','));
     finished.forEach(f => {
-      lines.push([
+      lines.push(indent + [
         esc(f.athlete),
         esc(formatDateTimeMs(f.startMs)),
         esc(formatDateTimeMs(f.finishMs)),
