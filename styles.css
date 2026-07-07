@@ -642,7 +642,7 @@ tr:last-child td {
 
 /* Zebra striping so rows are easier to track across columns */
 tbody tr:nth-child(even) td {
-  background: var(--surface-alt);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 th {
