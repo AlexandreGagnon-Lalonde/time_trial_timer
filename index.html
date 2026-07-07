@@ -178,8 +178,15 @@
         <span class="edit-sheet-title">Athlete Lookup</span>
         <button class="edit-sheet-close" onclick="closeLookup()">✕</button>
       </div>
-      <label for="lookup-select">Finished athlete</label>
-      <select id="lookup-select" onchange="renderLookupResult()"></select>
+      <input
+        id="lookup-input"
+        type="text"
+        inputmode="text"
+        placeholder="Type an athlete…"
+        autocomplete="off"
+        oninput="renderLookupOptions()"
+      />
+      <div id="lookup-options" class="lookup-options"></div>
       <div id="lookup-result" class="lookup-result"></div>
     </div>
 

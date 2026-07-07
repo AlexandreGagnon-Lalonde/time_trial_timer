@@ -850,17 +850,36 @@ th {
 }
 
 /* ── Athlete lookup ────────────────────────────────────────────────────── */
-#lookup-select {
+.lookup-options {
+  margin-top: 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lookup-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  box-sizing: border-box;
+  padding: 12px 14px;
   font-size: 16px;
-  padding: 11px 12px;
-  border-radius: var(--radius-md);
-  border: 1.5px solid var(--border);
-  background: var(--surface);
+  font-weight: 600;
+  text-align: left;
   color: var(--text);
-  -webkit-appearance: none;
-  appearance: none;
+  background: var(--surface-alt);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.lookup-option-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-muted);
 }
 
 .lookup-result {

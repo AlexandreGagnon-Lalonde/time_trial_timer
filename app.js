@@ -451,31 +451,53 @@ function getFinishedAthletes() {
 
 function openLookup() {
   hideMenu();
-  const select = document.getElementById('lookup-select');
-  const result = document.getElementById('lookup-result');
-  const finished = getFinishedAthletes();
-  if (!finished.length) {
-    select.innerHTML = '<option value="">No finished athletes yet</option>';
-    result.innerHTML = '<p class="lookup-empty">No athlete has both a start and a finish yet.</p>';
-  } else {
-    select.innerHTML =
-      '<option value="">Select an athlete…</option>' +
-      finished.map(f => `<option value="${escapeHtml(f.athlete)}">${escapeHtml(f.athlete)}</option>`).join('');
-    result.innerHTML = '';
-  }
+  document.getElementById('lookup-input').value = '';
+  document.getElementById('lookup-result').innerHTML = '';
+  renderLookupOptions();
   document.getElementById('lookup-overlay').classList.remove('hidden');
   document.getElementById('lookup-sheet').classList.remove('hidden');
+  bindKeyboardTracking();
 }
 
 function closeLookup() {
   document.getElementById('lookup-overlay').classList.add('hidden');
   document.getElementById('lookup-sheet').classList.add('hidden');
+  unbindKeyboardTracking();
 }
 
-function renderLookupResult() {
-  const athlete = document.getElementById('lookup-select').value;
+// Filter the finished-athlete list by what's typed; show an exact match's result.
+function renderLookupOptions() {
+  const q = document.getElementById('lookup-input').value.trim().toLowerCase();
+  const opts = document.getElementById('lookup-options');
+  const result = document.getElementById('lookup-result');
+  const finished = getFinishedAthletes();
+  if (!finished.length) {
+    opts.innerHTML = '<p class="lookup-empty">No athlete has both a start and a finish yet.</p>';
+    result.innerHTML = '';
+    return;
+  }
+  const matches = q ? finished.filter(f => f.athlete.toLowerCase().includes(q)) : finished;
+  opts.innerHTML = matches.length
+    ? matches.map(f =>
+        `<button type="button" class="lookup-option" data-athlete="${escapeHtml(f.athlete)}">` +
+        `<span>${escapeHtml(f.athlete)}</span>` +
+        `<span class="lookup-option-time">${formatElapsed(f.elapsedMs)}</span></button>`
+      ).join('')
+    : '<p class="lookup-empty">No match.</p>';
+  const exact = finished.find(f => f.athlete.toLowerCase() === q);
+  if (exact) showLookupResult(exact.athlete);
+  else result.innerHTML = '';
+}
+
+function selectLookupAthlete(name) {
+  document.getElementById('lookup-input').value = name;
+  document.getElementById('lookup-options').innerHTML = '';
+  document.getElementById('lookup-input').blur();
+  showLookupResult(name);
+}
+
+function showLookupResult(athlete) {
   const el = document.getElementById('lookup-result');
-  if (!athlete) { el.innerHTML = ''; return; }
   const f = getFinishedAthletes().find(x => x.athlete === athlete);
   if (!f) { el.innerHTML = ''; return; }
   const parts = [];
@@ -523,7 +545,7 @@ function closeEditSheet() {
 // reports the un-obscured area; translate the sheet up by the covered height.
 function updateSheetForKeyboard() {
   const vv = window.visualViewport;
-  const sheet = document.getElementById('edit-sheet');
+  const sheet = document.querySelector('.edit-sheet:not(.hidden)');
   if (!vv || !sheet) return;
   const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
   sheet.style.transform = keyboardHeight ? `translateY(-${keyboardHeight}px)` : '';
@@ -536,8 +558,7 @@ function bindKeyboardTracking() {
 }
 
 function unbindKeyboardTracking() {
-  const sheet = document.getElementById('edit-sheet');
-  if (sheet) sheet.style.transform = '';
+  document.querySelectorAll('.edit-sheet').forEach(s => { s.style.transform = ''; });
   if (!window.visualViewport) return;
   window.visualViewport.removeEventListener('resize', updateSheetForKeyboard);
   window.visualViewport.removeEventListener('scroll', updateSheetForKeyboard);
@@ -585,6 +606,12 @@ function saveEdit() {
   });
 
   document.getElementById('athlete').addEventListener('input', updateFinishBtn);
+
+  // Lookup: pick a filtered athlete (delegated so it survives re-renders)
+  document.getElementById('lookup-options').addEventListener('click', e => {
+    const btn = e.target.closest('.lookup-option');
+    if (btn) selectLookupAthlete(btn.dataset.athlete);
+  });
 
   // Stamp buttons: fire on release, primary pointer only, no context menu
   [['start', 'START'], ['finish', 'FINISH']].forEach(([cls, type]) => {
