@@ -485,7 +485,8 @@ function renderLookupOptions() {
       ).join('')
     : '<p class="lookup-empty">No match.</p>';
   const exact = finished.find(f => f.athlete.toLowerCase() === q);
-  if (exact) showLookupResult(exact.athlete);
+  if (matches.length === 1) showLookupResult(matches[0].athlete);
+  else if (exact) showLookupResult(exact.athlete);
   else result.innerHTML = '';
 }
 
