@@ -20,6 +20,16 @@
       <button class="inapp-banner-close" onclick="dismissInAppBanner()">✕</button>
     </div>
 
+    <!-- Hold / "armed" overlay while a stamp button is pressed -->
+    <div id="hold-overlay" class="hold-overlay" aria-hidden="true">
+      <div class="hold-label">
+        <span id="hold-type"></span>
+        <span id="hold-athlete" class="hold-athlete"></span>
+      </div>
+      <div id="hold-clock" class="hold-clock">--:--:--.--</div>
+      <div class="hold-hint">Release to record</div>
+    </div>
+
     <!-- LOBBY -->
     <div id="screen-lobby" class="screen">
       <div class="wrap">

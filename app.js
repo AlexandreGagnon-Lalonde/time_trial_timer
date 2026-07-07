@@ -63,7 +63,26 @@ function tick() {
   const dateEl = document.getElementById('date');
   if (timerEl) timerEl.textContent = t;
   if (dateEl) dateEl.textContent = d;
+  const holdEl = document.getElementById('hold-clock');
+  if (holdEl && holdEl.parentElement.classList.contains('showing')) holdEl.textContent = t;
   requestAnimationFrame(tick);
+}
+
+// ── Hold / armed overlay ─────────────────────────────────────────────────
+function showHold(type) {
+  const o = document.getElementById('hold-overlay');
+  if (!o) return;
+  o.classList.remove('start', 'finish');
+  o.classList.add(type === 'START' ? 'start' : 'finish', 'showing');
+  document.getElementById('hold-type').textContent = type;
+  const athlete = document.getElementById('athlete').value.trim();
+  document.getElementById('hold-athlete').textContent = athlete ? '#' + athlete : '';
+  if (navigator.vibrate) navigator.vibrate(20); // Android tactile confirm; iOS ignores
+}
+
+function hideHold() {
+  const o = document.getElementById('hold-overlay');
+  if (o) o.classList.remove('showing');
 }
 
 // ── Screen management ──────────────────────────────────────────────────────
@@ -478,10 +497,10 @@ function saveEdit() {
   // Stamp buttons: fire on release, primary pointer only, no context menu
   [['start', 'START'], ['finish', 'FINISH']].forEach(([cls, type]) => {
     const btn = document.querySelector(`.${cls}`);
-    btn.addEventListener('pointerdown',  e => { if (e.isPrimary && !btn.disabled) btn.classList.add('is-pressed'); });
-    btn.addEventListener('pointerup',    e => { btn.classList.remove('is-pressed'); if (e.isPrimary && e.button === 0 && !btn.disabled) logStamp(type); });
-    btn.addEventListener('pointercancel',() => btn.classList.remove('is-pressed'));
-    btn.addEventListener('pointerleave', () => btn.classList.remove('is-pressed'));
+    btn.addEventListener('pointerdown',  e => { if (e.isPrimary && !btn.disabled) { btn.classList.add('is-pressed'); showHold(type); } });
+    btn.addEventListener('pointerup',    e => { btn.classList.remove('is-pressed'); hideHold(); if (e.isPrimary && e.button === 0 && !btn.disabled) logStamp(type); });
+    btn.addEventListener('pointercancel',() => { btn.classList.remove('is-pressed'); hideHold(); });
+    btn.addEventListener('pointerleave', () => { btn.classList.remove('is-pressed'); hideHold(); });
     btn.addEventListener('contextmenu',  e => e.preventDefault());
   });
 })();
