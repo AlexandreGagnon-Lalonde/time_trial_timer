@@ -592,7 +592,9 @@ button.is-pressed {
 
 .start,
 .finish {
-  touch-action: manipulation;
+  /* none (not manipulation) so sliding a finger doesn't become a scroll/pan
+     gesture that cancels the press before release */
+  touch-action: none;
 }
 
 .start {

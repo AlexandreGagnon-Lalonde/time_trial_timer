@@ -650,10 +650,16 @@ function saveEdit() {
   // Stamp buttons: fire on release, primary pointer only, no context menu
   [['start', 'START'], ['finish', 'FINISH']].forEach(([cls, type]) => {
     const btn = document.querySelector(`.${cls}`);
-    btn.addEventListener('pointerdown',  e => { if (e.isPrimary && !btn.disabled) { btn.classList.add('is-pressed'); showHold(type); } });
+    btn.addEventListener('pointerdown',  e => {
+      if (!e.isPrimary || btn.disabled) return;
+      // Capture so the gesture stays bound to the button even if the finger
+      // slides off it — release anywhere on screen still records the time.
+      try { btn.setPointerCapture(e.pointerId); } catch {}
+      btn.classList.add('is-pressed');
+      showHold(type);
+    });
     btn.addEventListener('pointerup',    e => { btn.classList.remove('is-pressed'); hideHold(); if (e.isPrimary && e.button === 0 && !btn.disabled) logStamp(type); });
     btn.addEventListener('pointercancel',() => { btn.classList.remove('is-pressed'); hideHold(); });
-    btn.addEventListener('pointerleave', () => { btn.classList.remove('is-pressed'); hideHold(); });
     btn.addEventListener('contextmenu',  e => e.preventDefault());
   });
 })();
