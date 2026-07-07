@@ -70,6 +70,19 @@ body {
   padding: 14px 16px;
   background: var(--bg);
   color: var(--text);
+  height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden; /* page never scrolls; screens manage their own scroll */
+}
+
+/* Each active screen fills the viewport; the lobby scrolls internally if long */
+#screen-lobby:not(.hidden) {
+  height: 100%;
+  overflow-y: auto;
+}
+
+#screen-timer:not(.hidden) {
+  height: 100%;
 }
 
 .hidden {
@@ -663,7 +676,7 @@ button.is-pressed {
 #screen-timer:not(.hidden) .wrap {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 28px); /* body has 14px top + 14px bottom padding */
+  height: 100%; /* fills the body content box, which is locked to the viewport */
 }
 
 #screen-timer:not(.hidden) .wrap > *:not(.tablewrap) {
