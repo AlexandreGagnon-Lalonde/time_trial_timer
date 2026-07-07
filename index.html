@@ -80,6 +80,7 @@
                 <span class="menu-label">Options</span>
                 <button class="menu-close-btn" onclick="hideMenu()">✕</button>
               </div>
+              <button class="menu-item" onclick="openLookup()">Athlete Lookup</button>
               <button class="menu-item" onclick="downloadCSV()">Download CSV</button>
               <button class="menu-item" onclick="toggleRenameField()">Rename Room</button>
               <div id="rename-section" class="rename-section hidden">
@@ -163,6 +164,23 @@
         <button class="edit-cancel" onclick="closeEditSheet()">Cancel</button>
         <button class="edit-save" onclick="saveEdit()">Save</button>
       </div>
+    </div>
+
+    <!-- LOOKUP SHEET -->
+    <div
+      id="lookup-overlay"
+      class="edit-overlay hidden"
+      onclick="closeLookup()"
+    ></div>
+    <div id="lookup-sheet" class="edit-sheet hidden">
+      <div class="edit-sheet-handle"></div>
+      <div class="edit-sheet-header">
+        <span class="edit-sheet-title">Athlete Lookup</span>
+        <button class="edit-sheet-close" onclick="closeLookup()">✕</button>
+      </div>
+      <label for="lookup-select">Finished athlete</label>
+      <select id="lookup-select" onchange="renderLookupResult()"></select>
+      <div id="lookup-result" class="lookup-result"></div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>

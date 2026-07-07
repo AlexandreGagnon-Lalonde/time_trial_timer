@@ -41,6 +41,21 @@ function formatDate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Elapsed duration as M:SS.xx (or H:MM:SS.xx past an hour)
+function formatElapsed(ms) {
+  if (!(ms >= 0)) return '—';
+  const totalHundredths = Math.round(ms / 10);
+  const hundredths = totalHundredths % 100;
+  const totalSeconds = Math.floor(totalHundredths / 100);
+  const seconds = totalSeconds % 60;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const minutes = totalMinutes % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  return hours > 0
+    ? `${hours}:${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`
+    : `${minutes}:${pad(seconds)}.${pad(hundredths)}`;
+}
+
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -400,6 +415,83 @@ function downloadCSV() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+// ── Athlete lookup ───────────────────────────────────────────────────────
+// Build the list of athletes with both a start and a finish, computing each
+// one's elapsed time from the earliest start to the first finish after it.
+function getFinishedAthletes() {
+  const byAthlete = {};
+  stamps.forEach(s => {
+    const a = (s.athlete || '').trim();
+    if (!a || typeof s.epoch_ms !== 'number') return;
+    (byAthlete[a] = byAthlete[a] || { starts: [], finishes: [] });
+    if (s.type === 'START') byAthlete[a].starts.push(s.epoch_ms);
+    else if (s.type === 'FINISH') byAthlete[a].finishes.push(s.epoch_ms);
+  });
+  const out = [];
+  Object.keys(byAthlete).forEach(a => {
+    const { starts, finishes } = byAthlete[a];
+    if (!starts.length || !finishes.length) return;
+    const startMs = Math.min(...starts);
+    const after = finishes.filter(f => f >= startMs).sort((x, y) => x - y);
+    const finishMs = after.length ? after[0] : Math.max(...finishes);
+    out.push({
+      athlete: a,
+      startMs,
+      finishMs,
+      elapsedMs: finishMs - startMs,
+      multiStart: starts.length > 1,
+      multiFinish: finishes.length > 1,
+    });
+  });
+  out.sort((a, b) => a.athlete.localeCompare(b.athlete, undefined, { numeric: true }));
+  return out;
+}
+
+function openLookup() {
+  hideMenu();
+  const select = document.getElementById('lookup-select');
+  const result = document.getElementById('lookup-result');
+  const finished = getFinishedAthletes();
+  if (!finished.length) {
+    select.innerHTML = '<option value="">No finished athletes yet</option>';
+    result.innerHTML = '<p class="lookup-empty">No athlete has both a start and a finish yet.</p>';
+  } else {
+    select.innerHTML =
+      '<option value="">Select an athlete…</option>' +
+      finished.map(f => `<option value="${escapeHtml(f.athlete)}">${escapeHtml(f.athlete)}</option>`).join('');
+    result.innerHTML = '';
+  }
+  document.getElementById('lookup-overlay').classList.remove('hidden');
+  document.getElementById('lookup-sheet').classList.remove('hidden');
+}
+
+function closeLookup() {
+  document.getElementById('lookup-overlay').classList.add('hidden');
+  document.getElementById('lookup-sheet').classList.add('hidden');
+}
+
+function renderLookupResult() {
+  const athlete = document.getElementById('lookup-select').value;
+  const el = document.getElementById('lookup-result');
+  if (!athlete) { el.innerHTML = ''; return; }
+  const f = getFinishedAthletes().find(x => x.athlete === athlete);
+  if (!f) { el.innerHTML = ''; return; }
+  const parts = [];
+  if (f.multiStart) parts.push('starts');
+  if (f.multiFinish) parts.push('finishes');
+  const warn = parts.length
+    ? `<p class="lookup-warn">Multiple ${parts.join(' & ')} recorded — using the earliest start and the first finish after it.</p>`
+    : '';
+  el.innerHTML = `
+    <div class="lookup-elapsed">${formatElapsed(f.elapsedMs)}</div>
+    <div class="lookup-detail">
+      <span>Start</span><strong>${formatStamp(new Date(f.startMs))}</strong>
+      <span>Finish</span><strong>${formatStamp(new Date(f.finishMs))}</strong>
+    </div>
+    ${warn}
+  `;
 }
 
 // ── Edit sheet ─────────────────────────────────────────────────────────────

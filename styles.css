@@ -849,6 +849,69 @@ th {
   background: var(--accent-hover);
 }
 
+/* ── Athlete lookup ────────────────────────────────────────────────────── */
+#lookup-select {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  padding: 11px 12px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lookup-result {
+  margin-top: 16px;
+  min-height: 40px;
+}
+
+.lookup-elapsed {
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(40px, 12vw, 64px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: var(--accent);
+  text-align: center;
+}
+
+.lookup-detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 14px;
+  margin-top: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lookup-detail span {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.lookup-detail strong {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.lookup-empty,
+.lookup-warn {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+
+.lookup-warn {
+  margin-top: 14px;
+}
+
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 520px) {
   body {
