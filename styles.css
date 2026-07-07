@@ -640,6 +640,11 @@ tr:last-child td {
   border-bottom: 0;
 }
 
+/* Zebra striping so rows are easier to track across columns */
+tbody tr:nth-child(even) td {
+  background: var(--surface-alt);
+}
+
 th {
   background: var(--surface-alt);
   font-size: 11px;
