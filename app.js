@@ -518,6 +518,8 @@ function updateAthleteSuggestions() {
   const active = [...getAthleteIndex().values()]
     .filter(e => e.started && !e.finished && normAthlete(e.display).includes(q))
     .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
+  // Exact match already typed — nothing left to suggest, so drop the dropdown.
+  if (active.some(e => normAthlete(e.display) === q)) { dl.innerHTML = ''; return; }
   dl.innerHTML = active.map(e => `<option value="${escapeHtml(e.display)}"></option>`).join('');
 }
 
