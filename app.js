@@ -506,18 +506,19 @@ function getAthleteIndex() {
   return seen;
 }
 
-// Refresh the <datalist> backing the athlete field: athletes who've started
-// but not finished come first (most likely to be finished next).
+// Refresh the <datalist> backing the athlete field: only athletes who've
+// started but not finished, filtered to what's currently typed so a no-match
+// shows nothing.
 function updateAthleteSuggestions() {
   const dl = document.getElementById('athlete-list');
-  if (!dl) return;
-  const all = [...getAthleteIndex().values()];
-  const cmp = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true });
-  const active = all.filter(e => e.started && !e.finished).sort(cmp);
-  const rest = all.filter(e => !(e.started && !e.finished)).sort(cmp);
-  dl.innerHTML = [...active, ...rest]
-    .map(e => `<option value="${escapeHtml(e.display)}"></option>`)
-    .join('');
+  const input = document.getElementById('athlete');
+  if (!dl || !input) return;
+  let active = [...getAthleteIndex().values()]
+    .filter(e => e.started && !e.finished)
+    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
+  const q = normAthlete(input.value);
+  if (q) active = active.filter(e => normAthlete(e.display).includes(q));
+  dl.innerHTML = active.map(e => `<option value="${escapeHtml(e.display)}"></option>`).join('');
 }
 
 function openLookup() {
@@ -677,7 +678,10 @@ function saveEdit() {
     if (e.key === 'Enter') saveRoomName();
   });
 
-  document.getElementById('athlete').addEventListener('input', updateFinishBtn);
+  document.getElementById('athlete').addEventListener('input', () => {
+    updateFinishBtn();
+    updateAthleteSuggestions();
+  });
 
   // Lookup: pick a filtered athlete (delegated so it survives re-renders)
   document.getElementById('lookup-options').addEventListener('click', e => {
