@@ -115,8 +115,10 @@
         <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
 
         <label for="athlete">Athlete</label>
-        <input id="athlete" inputmode="text" placeholder="Example: 214" list="athlete-list" autocomplete="off" />
-        <datalist id="athlete-list"></datalist>
+        <div class="athlete-field">
+          <input id="athlete" inputmode="text" placeholder="Example: 214" autocomplete="off" />
+          <div id="athlete-suggest" class="athlete-suggest hidden"></div>
+        </div>
 
         <label for="note">Note</label>
         <input

@@ -558,6 +558,50 @@ input:focus {
   border-color: var(--accent);
 }
 
+/* Athlete suggestion dropdown (custom, replaces the native datalist) */
+.athlete-field {
+  position: relative;
+}
+
+.athlete-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.suggest-item {
+  width: 100%;
+  text-align: left;
+  padding: 11px 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.suggest-item:last-child {
+  border-bottom: 0;
+}
+
+.suggest-item:active {
+  background: var(--surface-alt);
+  transform: none;
+}
+
 /* ── Stamp buttons ─────────────────────────────────────────────────────── */
 .buttons {
   display: grid;

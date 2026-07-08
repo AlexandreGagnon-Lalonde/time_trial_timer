@@ -506,21 +506,30 @@ function getAthleteIndex() {
   return seen;
 }
 
-// Refresh the <datalist> backing the athlete field: only athletes who've
-// started but not finished, filtered to what's currently typed so a no-match
-// shows nothing.
+// Custom suggestion dropdown for the athlete field (a native <datalist> stacks
+// with the browser's own autofill popup and behaves inconsistently). Shows only
+// athletes who've started but not finished, filtered to what's typed; hidden
+// when the field is blank, unfocused, has no match, or exactly matches a name.
+function hideAthleteSuggest() {
+  const box = document.getElementById('athlete-suggest');
+  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+}
+
 function updateAthleteSuggestions() {
-  const dl = document.getElementById('athlete-list');
+  const box = document.getElementById('athlete-suggest');
   const input = document.getElementById('athlete');
-  if (!dl || !input) return;
+  if (!box || !input) return;
+  if (document.activeElement !== input) return hideAthleteSuggest();
   const q = normAthlete(input.value);
-  if (!q) { dl.innerHTML = ''; return; } // only suggest once something is typed
-  const active = [...getAthleteIndex().values()]
+  if (!q) return hideAthleteSuggest();
+  const matches = [...getAthleteIndex().values()]
     .filter(e => e.started && !e.finished && normAthlete(e.display).includes(q))
     .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
-  // Exact match already typed — nothing left to suggest, so drop the dropdown.
-  if (active.some(e => normAthlete(e.display) === q)) { dl.innerHTML = ''; return; }
-  dl.innerHTML = active.map(e => `<option value="${escapeHtml(e.display)}"></option>`).join('');
+  if (!matches.length || matches.some(e => normAthlete(e.display) === q)) return hideAthleteSuggest();
+  box.innerHTML = matches
+    .map(e => `<button type="button" class="suggest-item" data-name="${escapeHtml(e.display)}">${escapeHtml(e.display)}</button>`)
+    .join('');
+  box.classList.remove('hidden');
 }
 
 function openLookup() {
@@ -680,9 +689,17 @@ function saveEdit() {
     if (e.key === 'Enter') saveRoomName();
   });
 
-  document.getElementById('athlete').addEventListener('input', () => {
+  const athleteInput = document.getElementById('athlete');
+  athleteInput.addEventListener('input', () => { updateFinishBtn(); updateAthleteSuggestions(); });
+  athleteInput.addEventListener('focus', updateAthleteSuggestions);
+  athleteInput.addEventListener('blur', () => setTimeout(hideAthleteSuggest, 100));
+  document.getElementById('athlete-suggest').addEventListener('pointerdown', e => {
+    const item = e.target.closest('.suggest-item');
+    if (!item) return;
+    e.preventDefault(); // keep focus; avoid a blur race hiding the list first
+    athleteInput.value = item.dataset.name;
+    hideAthleteSuggest();
     updateFinishBtn();
-    updateAthleteSuggestions();
   });
 
   // Lookup: pick a filtered athlete (delegated so it survives re-renders)
