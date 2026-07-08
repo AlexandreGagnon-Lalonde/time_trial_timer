@@ -722,6 +722,21 @@ tbody tr:nth-child(even) td {
   background: rgba(0, 0, 0, 0.05);
 }
 
+/* Finish with no matching start — flag for later reconciliation */
+tbody tr.row-unmatched td {
+  background: var(--finish-light);
+}
+
+.unmatched-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--finish);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 th {
   background: var(--surface-alt);
   font-size: 11px;

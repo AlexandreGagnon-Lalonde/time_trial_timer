@@ -169,6 +169,7 @@ function subscribeToRoom(code) {
     render();
     renderActiveRacers();
     updateFinishBtn();
+    updateAthleteSuggestions();
   });
 
   db.ref(`rooms/${code}/meta/deleted`).on('value', snap => {
@@ -379,15 +380,19 @@ function renderActiveRacers() {
 function render() {
   const tbody = document.getElementById('rows');
   if (!tbody) return;
+  // Athletes who have a start, for flagging finishes that can't be paired.
+  const startedKeys = new Set();
+  stamps.forEach(s => { if (s.type === 'START') startedKeys.add(normAthlete(s.athlete)); });
   tbody.innerHTML = '';
   stamps.slice().reverse().forEach((r, i) => {
     const n = stamps.length - i;
+    const unmatched = r.type === 'FINISH' && !startedKeys.has(normAthlete(r.athlete));
     const tr = document.createElement('tr');
-    tr.className = 'row-clickable';
+    tr.className = 'row-clickable' + (unmatched ? ' row-unmatched' : '');
     tr.onclick = () => openEditSheet(r._key);
     tr.innerHTML = `
       <td>${n}${r.editedAt ? '<span class="edited-dot"></span>' : ''}</td>
-      <td>${escapeHtml(r.type)}</td>
+      <td>${escapeHtml(r.type)}${unmatched ? '<span class="unmatched-dot" title="No matching start"></span>' : ''}</td>
       <td>${escapeHtml(r.time)}</td>
       <td>${escapeHtml(r.date)}</td>
       <td>${escapeHtml(r.athlete)}</td>
@@ -450,26 +455,31 @@ function downloadCSV() {
 }
 
 // ── Athlete lookup ───────────────────────────────────────────────────────
+// Match athletes case- and whitespace-insensitively so "Stephanie",
+// "stephanie" and " Stephanie " count as the same person.
+function normAthlete(s) {
+  return (s || '').trim().toLowerCase();
+}
+
 // Build the list of athletes with both a start and a finish, computing each
 // one's elapsed time from the earliest start to the first finish after it.
 function getFinishedAthletes() {
-  const byAthlete = {};
+  const byKey = {};
   stamps.forEach(s => {
-    const a = (s.athlete || '').trim();
-    if (!a || typeof s.epoch_ms !== 'number') return;
-    (byAthlete[a] = byAthlete[a] || { starts: [], finishes: [] });
-    if (s.type === 'START') byAthlete[a].starts.push(s.epoch_ms);
-    else if (s.type === 'FINISH') byAthlete[a].finishes.push(s.epoch_ms);
+    const key = normAthlete(s.athlete);
+    if (!key || typeof s.epoch_ms !== 'number') return;
+    (byKey[key] = byKey[key] || { display: (s.athlete || '').trim(), starts: [], finishes: [] });
+    if (s.type === 'START') byKey[key].starts.push(s.epoch_ms);
+    else if (s.type === 'FINISH') byKey[key].finishes.push(s.epoch_ms);
   });
   const out = [];
-  Object.keys(byAthlete).forEach(a => {
-    const { starts, finishes } = byAthlete[a];
+  Object.values(byKey).forEach(({ display, starts, finishes }) => {
     if (!starts.length || !finishes.length) return;
     const startMs = Math.min(...starts);
     const after = finishes.filter(f => f >= startMs).sort((x, y) => x - y);
     const finishMs = after.length ? after[0] : Math.max(...finishes);
     out.push({
-      athlete: a,
+      athlete: display,
       startMs,
       finishMs,
       elapsedMs: finishMs - startMs,
@@ -479,6 +489,35 @@ function getFinishedAthletes() {
   });
   out.sort((a, b) => a.athlete.localeCompare(b.athlete, undefined, { numeric: true }));
   return out;
+}
+
+// Distinct athlete names seen, each tagged with whether they've started and
+// finished. Used for autocomplete suggestions and unmatched-finish flags.
+function getAthleteIndex() {
+  const seen = new Map();
+  stamps.forEach(s => {
+    const key = normAthlete(s.athlete);
+    if (!key) return;
+    if (!seen.has(key)) seen.set(key, { key, display: (s.athlete || '').trim(), started: false, finished: false });
+    const e = seen.get(key);
+    if (s.type === 'START') e.started = true;
+    else if (s.type === 'FINISH') e.finished = true;
+  });
+  return seen;
+}
+
+// Refresh the <datalist> backing the athlete field: athletes who've started
+// but not finished come first (most likely to be finished next).
+function updateAthleteSuggestions() {
+  const dl = document.getElementById('athlete-list');
+  if (!dl) return;
+  const all = [...getAthleteIndex().values()];
+  const cmp = (a, b) => a.display.localeCompare(b.display, undefined, { numeric: true });
+  const active = all.filter(e => e.started && !e.finished).sort(cmp);
+  const rest = all.filter(e => !(e.started && !e.finished)).sort(cmp);
+  dl.innerHTML = [...active, ...rest]
+    .map(e => `<option value="${escapeHtml(e.display)}"></option>`)
+    .join('');
 }
 
 function openLookup() {
