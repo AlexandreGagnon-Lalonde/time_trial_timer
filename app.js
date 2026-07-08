@@ -337,10 +337,9 @@ function logStamp(type) {
 // ── Finish button state ─────────────────────────────────────────────────────
 
 function updateFinishBtn() {
-  const athlete = document.getElementById('athlete').value.trim();
-  const btn = document.querySelector('.finish');
-  const hasStarted = !athlete || stamps.some(s => s.type === 'START' && s.athlete === athlete);
-  btn.disabled = !hasStarted;
+  // Anyone can finish, whether or not a matching start exists — mismatched
+  // names are easy to reconcile afterwards by editing the stamps.
+  document.querySelector('.finish').disabled = false;
 }
 
 // ── Active racers ───────────────────────────────────────────────────────────
