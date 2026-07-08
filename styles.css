@@ -179,6 +179,56 @@ h1 {
   opacity: 0.8;
 }
 
+/* Drag-to-cancel zone pinned to the bottom of the armed overlay. Its visual
+   top is also the hit threshold (see updateHoldCancel). */
+.hold-cancel {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 2px dashed currentColor;
+  border-radius: var(--radius-lg);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.hold-cancel-icon {
+  font-size: 20px;
+}
+
+/* Finger over the cancel zone: neutralize the overlay so it's unmistakably
+   "won't record", and make the zone solid. */
+.hold-overlay.in-cancel {
+  background: var(--text-muted);
+  color: #fff;
+}
+
+.hold-overlay.in-cancel .hold-clock,
+.hold-overlay.in-cancel .hold-label {
+  opacity: 0.35;
+}
+
+.hold-overlay.in-cancel .hold-hint {
+  opacity: 0;
+}
+
+.hold-overlay.in-cancel .hold-cancel {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.18);
+  border-style: solid;
+}
+
 /* ── Lobby ─────────────────────────────────────────────────────────────── */
 .room-name-input {
   margin-bottom: 10px;

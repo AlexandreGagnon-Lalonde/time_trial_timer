@@ -98,10 +98,13 @@ function tick() {
 }
 
 // ── Hold / armed overlay ─────────────────────────────────────────────────
+let holdCancelActive = false; // finger currently over the cancel zone
+
 function showHold(type) {
   const o = document.getElementById('hold-overlay');
   if (!o) return;
-  o.classList.remove('start', 'finish');
+  holdCancelActive = false;
+  o.classList.remove('start', 'finish', 'in-cancel');
   o.classList.add(type === 'START' ? 'start' : 'finish', 'showing');
   document.getElementById('hold-type').textContent = type;
   const athlete = document.getElementById('athlete').value.trim();
@@ -111,7 +114,21 @@ function showHold(type) {
 
 function hideHold() {
   const o = document.getElementById('hold-overlay');
-  if (o) o.classList.remove('showing');
+  if (o) o.classList.remove('showing', 'in-cancel');
+}
+
+// While armed, light up the cancel zone when the finger is over it and flag
+// that releasing there should discard the time instead of recording it.
+function updateHoldCancel(clientY) {
+  const o = document.getElementById('hold-overlay');
+  const zone = document.getElementById('hold-cancel');
+  if (!o || !zone || !o.classList.contains('showing')) return;
+  const inZone = clientY >= zone.getBoundingClientRect().top;
+  if (inZone !== holdCancelActive) {
+    holdCancelActive = inZone;
+    o.classList.toggle('in-cancel', inZone);
+    if (inZone && navigator.vibrate) navigator.vibrate(15);
+  }
 }
 
 // ── Screen management ──────────────────────────────────────────────────────
@@ -719,7 +736,13 @@ function saveEdit() {
       btn.classList.add('is-pressed');
       showHold(type);
     });
-    btn.addEventListener('pointerup',    e => { btn.classList.remove('is-pressed'); hideHold(); if (e.isPrimary && e.button === 0 && !btn.disabled) logStamp(type); });
+    btn.addEventListener('pointermove',  e => { if (e.isPrimary) updateHoldCancel(e.clientY); });
+    btn.addEventListener('pointerup',    e => {
+      btn.classList.remove('is-pressed');
+      const cancelled = holdCancelActive;
+      hideHold();
+      if (e.isPrimary && e.button === 0 && !btn.disabled && !cancelled) logStamp(type);
+    });
     btn.addEventListener('pointercancel',() => { btn.classList.remove('is-pressed'); hideHold(); });
     btn.addEventListener('contextmenu',  e => e.preventDefault());
   });
