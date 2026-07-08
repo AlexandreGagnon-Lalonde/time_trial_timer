@@ -513,11 +513,11 @@ function updateAthleteSuggestions() {
   const dl = document.getElementById('athlete-list');
   const input = document.getElementById('athlete');
   if (!dl || !input) return;
-  let active = [...getAthleteIndex().values()]
-    .filter(e => e.started && !e.finished)
-    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
   const q = normAthlete(input.value);
-  if (q) active = active.filter(e => normAthlete(e.display).includes(q));
+  if (!q) { dl.innerHTML = ''; return; } // only suggest once something is typed
+  const active = [...getAthleteIndex().values()]
+    .filter(e => e.started && !e.finished && normAthlete(e.display).includes(q))
+    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
   dl.innerHTML = active.map(e => `<option value="${escapeHtml(e.display)}"></option>`).join('');
 }
 
