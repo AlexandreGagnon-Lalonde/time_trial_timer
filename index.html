@@ -72,6 +72,21 @@
       </div>
     </div>
 
+    <!-- SPECTATE (read-only live results) -->
+    <div id="screen-spectate" class="screen hidden">
+      <div class="wrap">
+        <div class="header-row">
+          <div id="spectate-badge" class="room-badge"></div>
+          <button class="spectate-back" onclick="leaveSpectate()">✕</button>
+        </div>
+        <div class="spectate-updated-row">
+          <span class="live-dot"></span>
+          <span id="spectate-updated">Loading…</span>
+        </div>
+        <div id="spectate-content"></div>
+      </div>
+    </div>
+
     <!-- TIMER -->
     <div id="screen-timer" class="screen hidden">
       <div class="wrap">

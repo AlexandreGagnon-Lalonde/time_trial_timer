@@ -271,13 +271,34 @@ h1 {
 }
 
 .room-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
   padding: 13px 16px;
   font-size: 16px;
   font-weight: 600;
+  font-family: inherit;
+  text-align: left;
   color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.room-list-item:active {
+  background: var(--surface-alt);
+}
+
+.room-list-view {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .no-rooms {
@@ -372,6 +393,87 @@ h1 {
 
 .btn-join:hover {
   background: var(--border);
+}
+
+/* ── Spectate (read-only results) ──────────────────────────────────────── */
+#screen-spectate:not(.hidden) {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.spectate-back {
+  background: transparent;
+  border: 0;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.spectate-updated-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  margin: 2px 0 4px;
+}
+
+.spectate-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-muted);
+  margin: 18px 0 8px;
+}
+
+.spectate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-bottom: 6px;
+}
+
+.spectate-rank {
+  min-width: 26px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.spectate-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.spectate-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.spectate-row.oncourse .spectate-time {
+  color: var(--start);
+}
+
+.spectate-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0;
 }
 
 /* ── Timer header ──────────────────────────────────────────────────────── */

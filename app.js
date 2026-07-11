@@ -92,9 +92,21 @@ function generateCode() {
 // device's clock is from its servers; stamping with the corrected time puts
 // every phone on the same clock.
 let serverTimeOffset = 0;
-db.ref('.info/serverTimeOffset').on('value', snap => {
-  serverTimeOffset = snap.val() || 0;
-});
+let clockSyncStarted = false;
+
+// Only operators hold a live Firebase connection (the free plan caps
+// simultaneous connections at 100). The lobby and the spectator screen read
+// over plain HTTPS instead, so any number of viewers costs zero connections.
+// The socket opens when someone joins a room and closes back in the lobby.
+function connectDb() {
+  if (!clockSyncStarted) {
+    clockSyncStarted = true;
+    db.ref('.info/serverTimeOffset').on('value', snap => {
+      serverTimeOffset = snap.val() || 0;
+    });
+  }
+  db.goOnline();
+}
 
 function syncedNow() { return Date.now() + serverTimeOffset; }
 
@@ -108,6 +120,13 @@ function tick() {
   if (dateEl) dateEl.textContent = d;
   const holdEl = document.getElementById('hold-clock');
   if (holdEl && holdEl.parentElement.classList.contains('showing')) holdEl.textContent = t;
+  // Live "on course" timers on the spectator screen
+  if (spectateCode) {
+    document.querySelectorAll('.oncourse-time').forEach(el => {
+      const start = Number(el.dataset.start);
+      if (start) el.textContent = formatElapsed(now.getTime() - start);
+    });
+  }
   requestAnimationFrame(tick);
 }
 
@@ -156,10 +175,11 @@ function goToLobby() {
   detachFirebaseListeners();
   currentRoom = null;
   stamps = [];
-  lastAddedKey = null;
   hideMenu();
+  db.goOffline(); // free the live connection; the lobby polls over HTTPS
   const saved = localStorage.getItem(ROOM_KEY);
   if (saved) document.getElementById('join-code').value = saved;
+  startLobbyPolling();
   showScreen('screen-lobby');
 }
 
@@ -171,6 +191,8 @@ function updateBadge(name, code) {
 }
 
 function goToTimer(code, name = '') {
+  connectDb();
+  stopLobbyPolling();
   currentRoom = code;
   currentRoomName = name;
   localStorage.setItem(ROOM_KEY, code);
@@ -220,16 +242,33 @@ function ensureRoomIndexed(code) {
   });
 }
 
-function subscribeToRoomIndex() {
-  db.ref('roomIndex').on('value', snap => {
-    const rooms = [];
-    snap.forEach(child => {
-      const r = child.val();
-      if (!r.deleted) rooms.push({ code: child.key, ...r });
-    });
-    rooms.sort((a, b) => b.createdAt - a.createdAt);
-    renderRoomList(rooms);
-  });
+// The lobby list is fetched over plain HTTPS on an interval instead of a live
+// listener, so people browsing the lobby never hold a Firebase connection.
+let lobbyPollTimer = null;
+
+function fetchRoomList() {
+  if (document.hidden) return;
+  fetch(`${firebaseConfig.databaseURL}/roomIndex.json`)
+    .then(r => r.json())
+    .then(data => {
+      const rooms = Object.entries(data || {})
+        .filter(([, r]) => r && !r.deleted)
+        .map(([code, r]) => ({ code, ...r }));
+      rooms.sort((a, b) => b.createdAt - a.createdAt);
+      renderRoomList(rooms);
+    })
+    .catch(() => {}); // keep showing the last list if a poll fails
+}
+
+function startLobbyPolling() {
+  stopLobbyPolling();
+  fetchRoomList();
+  lobbyPollTimer = setInterval(fetchRoomList, 20000);
+}
+
+function stopLobbyPolling() {
+  clearInterval(lobbyPollTimer);
+  lobbyPollTimer = null;
 }
 
 function renderRoomList(rooms) {
@@ -240,15 +279,17 @@ function renderRoomList(rooms) {
     return;
   }
   el.innerHTML = rooms.map(r => `
-    <div class="room-list-item">
+    <button type="button" class="room-list-item" data-code="${r.code}" data-name="${escapeHtml(r.name)}">
       <span class="room-list-name">${escapeHtml(r.name)}</span>
-    </div>
+      <span class="room-list-view">Results ›</span>
+    </button>
   `).join('');
 }
 
 // ── Room actions ───────────────────────────────────────────────────────────
 
 function createRoom() {
+  connectDb();
   const name = document.getElementById('room-name').value.trim() || 'Unnamed Room';
   const code = generateCode();
   db.ref(`rooms/${code}/meta`).get()
@@ -267,6 +308,7 @@ function createRoom() {
 function joinRoomFromInput() {
   const raw = document.getElementById('join-code').value.trim().toUpperCase();
   if (raw.length !== 4) { alert('Please enter a 4-character room code.'); return; }
+  connectDb();
 
   db.ref(`rooms/${raw}/meta`).get()
     .then(snap => {
@@ -496,9 +538,9 @@ function normAthlete(s) {
 
 // Build the list of athletes with both a start and a finish, computing each
 // one's elapsed time from the earliest start to the first finish after it.
-function getFinishedAthletes() {
+function getFinishedAthletes(list = stamps) {
   const byKey = {};
-  stamps.forEach(s => {
+  list.forEach(s => {
     const key = normAthlete(s.athlete);
     if (!key || typeof s.epoch_ms !== 'number') return;
     (byKey[key] = byKey[key] || { display: (s.athlete || '').trim(), starts: [], finishes: [] });
@@ -526,15 +568,19 @@ function getFinishedAthletes() {
 
 // Distinct athlete names seen, each tagged with whether they've started and
 // finished. Used for autocomplete suggestions and unmatched-finish flags.
-function getAthleteIndex() {
+function getAthleteIndex(list = stamps) {
   const seen = new Map();
-  stamps.forEach(s => {
+  list.forEach(s => {
     const key = normAthlete(s.athlete);
     if (!key) return;
-    if (!seen.has(key)) seen.set(key, { key, display: (s.athlete || '').trim(), started: false, finished: false });
+    if (!seen.has(key)) seen.set(key, { key, display: (s.athlete || '').trim(), started: false, finished: false, startMs: null });
     const e = seen.get(key);
-    if (s.type === 'START') e.started = true;
-    else if (s.type === 'FINISH') e.finished = true;
+    if (s.type === 'START') {
+      e.started = true;
+      if (typeof s.epoch_ms === 'number' && (e.startMs === null || s.epoch_ms < e.startMs)) e.startMs = s.epoch_ms;
+    } else if (s.type === 'FINISH') {
+      e.finished = true;
+    }
   });
   return seen;
 }
@@ -633,6 +679,91 @@ function showLookupResult(athlete) {
   `;
 }
 
+// ── Spectate (read-only results, polled over HTTPS) ───────────────────────
+
+let spectateCode = null;
+let spectatePollTimer = null;
+
+function enterSpectate(code, name) {
+  spectateCode = code;
+  stopLobbyPolling();
+  updateSpectateBadge(name || code, code);
+  document.getElementById('spectate-updated').textContent = 'Loading…';
+  document.getElementById('spectate-content').innerHTML = '';
+  showScreen('screen-spectate');
+  fetchSpectate();
+  clearInterval(spectatePollTimer);
+  spectatePollTimer = setInterval(fetchSpectate, 15000);
+}
+
+function leaveSpectate() {
+  spectateCode = null;
+  clearInterval(spectatePollTimer);
+  spectatePollTimer = null;
+  goToLobby();
+}
+
+function updateSpectateBadge(name, code) {
+  document.getElementById('spectate-badge').innerHTML =
+    `${escapeHtml(name)} <span class="badge-code">${code}</span>`;
+}
+
+function fetchSpectate() {
+  if (!spectateCode || document.hidden) return;
+  const code = spectateCode;
+  fetch(`${firebaseConfig.databaseURL}/rooms/${code}.json`)
+    .then(r => r.json())
+    .then(data => {
+      if (code !== spectateCode) return; // left the screen mid-fetch
+      renderSpectate(data, code);
+      document.getElementById('spectate-updated').textContent =
+        `Updated ${formatStamp(new Date()).slice(0, 8)} · refreshes automatically`;
+    })
+    .catch(() => {
+      if (code !== spectateCode) return;
+      document.getElementById('spectate-updated').textContent = 'Offline — retrying…';
+    });
+}
+
+function renderSpectate(data, code) {
+  const content = document.getElementById('spectate-content');
+  if (!data || !data.meta || data.meta.deleted) {
+    content.innerHTML = '<p class="spectate-empty">This room is no longer available.</p>';
+    return;
+  }
+  updateSpectateBadge(data.meta.name || code, code);
+
+  const list = Object.values(data.stamps || {})
+    .filter(s => s && typeof s.epoch_ms === 'number')
+    .sort((a, b) => a.epoch_ms - b.epoch_ms);
+
+  const results = getFinishedAthletes(list).sort((a, b) => a.elapsedMs - b.elapsedMs);
+  const onCourse = [...getAthleteIndex(list).values()]
+    .filter(e => e.started && !e.finished)
+    .sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+
+  const resultRows = results.map((f, i) => `
+    <div class="spectate-row">
+      <span class="spectate-rank">${i + 1}</span>
+      <span class="spectate-name">${escapeHtml(f.athlete)}</span>
+      <span class="spectate-time">${formatElapsed(f.elapsedMs)}</span>
+    </div>`).join('');
+
+  const onCourseRows = onCourse.map(e => `
+    <div class="spectate-row oncourse">
+      <span class="spectate-rank"><span class="live-dot"></span></span>
+      <span class="spectate-name">${escapeHtml(e.display)}</span>
+      <span class="spectate-time oncourse-time" data-start="${e.startMs}">—</span>
+    </div>`).join('');
+
+  content.innerHTML = `
+    <div class="spectate-section-title">On course</div>
+    ${onCourse.length ? onCourseRows : '<p class="spectate-empty">Nobody is on course right now.</p>'}
+    <div class="spectate-section-title">Results</div>
+    ${results.length ? resultRows : '<p class="spectate-empty">No finished athletes yet.</p>'}
+  `;
+}
+
 // ── Edit sheet ─────────────────────────────────────────────────────────────
 
 function openEditSheet(key) {
@@ -696,14 +827,25 @@ function saveEdit() {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 (function init() {
+  db.goOffline(); // no live connection until someone joins a room as operator
   tick();
-  subscribeToRoomIndex();
+  startLobbyPolling();
   const saved = localStorage.getItem(ROOM_KEY);
-  if (saved) {
-    document.getElementById('join-code').value = saved;
-    ensureRoomIndexed(saved);
-  }
+  if (saved) document.getElementById('join-code').value = saved;
   showScreen('screen-lobby');
+
+  // Tap a live room to watch its results (read-only)
+  document.getElementById('room-list').addEventListener('click', e => {
+    const item = e.target.closest('.room-list-item');
+    if (item) enterSpectate(item.dataset.code, item.dataset.name || '');
+  });
+
+  // Refresh polled data as soon as the tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (spectateCode) fetchSpectate();
+    else if (lobbyPollTimer) fetchRoomList();
+  });
 
   // Close menu on outside click
   document.addEventListener('click', e => {
