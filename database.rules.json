@@ -1,6 +1,44 @@
 {
   "rules": {
     ".read": true,
-    ".write": true
+    ".write": false,
+
+    "rooms": {
+      "$code": {
+        "meta": {
+          ".write": "newData.exists()",
+          "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
+          "createdAt": { ".validate": "newData.isNumber()" },
+          "deleted": { ".validate": "newData.isBoolean()" },
+          "$other": { ".validate": false }
+        },
+        "stamps": {
+          "$stamp": {
+            ".write": "newData.exists()",
+            ".validate": "newData.hasChildren(['type', 'epoch_ms'])",
+            "type": { ".validate": "(newData.val() === 'START' || newData.val() === 'FINISH') && (!data.exists() || newData.val() === data.val())" },
+            "epoch_ms": { ".validate": "newData.isNumber() && (!data.exists() || newData.val() === data.val())" },
+            "athlete": { ".validate": "newData.isString()" },
+            "operator": { ".validate": "newData.isString()" },
+            "note": { ".validate": "newData.isString()" },
+            "editedAt": { ".validate": "newData.isNumber()" },
+            "time": { ".validate": "newData.isString()" },
+            "date": { ".validate": "newData.isString()" },
+            "iso": { ".validate": "newData.isString()" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
+
+    "roomIndex": {
+      "$code": {
+        ".write": "newData.exists()",
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "deleted": { ".validate": "newData.isBoolean()" },
+        "$other": { ".validate": false }
+      }
+    }
   }
 }

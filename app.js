@@ -55,6 +55,10 @@ function formatTimeMs(ms) {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
 }
 
+// Display strings derived from a stamp's epoch_ms (the single stored time)
+function stampTime(ms) { return typeof ms === 'number' ? formatStamp(new Date(ms)) : ''; }
+function stampDate(ms) { return typeof ms === 'number' ? formatDate(new Date(ms)) : ''; }
+
 // Elapsed duration as M:SS.xx (or H:MM:SS.xx past an hour)
 function formatElapsed(ms) {
   if (!(ms >= 0)) return '—';
@@ -83,9 +87,19 @@ function generateCode() {
 }
 
 // ── Clock ──────────────────────────────────────────────────────────────────
+// Phone clocks can disagree by seconds, so a start on one phone and a finish
+// on another would corrupt the elapsed time. Firebase reports how far this
+// device's clock is from its servers; stamping with the corrected time puts
+// every phone on the same clock.
+let serverTimeOffset = 0;
+db.ref('.info/serverTimeOffset').on('value', snap => {
+  serverTimeOffset = snap.val() || 0;
+});
+
+function syncedNow() { return Date.now() + serverTimeOffset; }
 
 function tick() {
-  const now = new Date();
+  const now = new Date(syncedNow());
   const t = formatStamp(now);
   const d = formatDate(now);
   const timerEl = document.getElementById('clock-time');
@@ -185,7 +199,6 @@ function subscribeToRoom(code) {
     stamps.sort((a, b) => a.epoch_ms - b.epoch_ms);
     render();
     renderActiveRacers();
-    updateFinishBtn();
     updateAthleteSuggestions();
   });
 
@@ -201,7 +214,7 @@ function ensureRoomIndexed(code) {
     if (snap.exists()) return;
     db.ref(`rooms/${code}/meta`).get().then(metaSnap => {
       if (!metaSnap.exists() || metaSnap.val().deleted) return;
-      const { name = code, createdAt = Date.now() } = metaSnap.val();
+      const { name = code, createdAt = syncedNow() } = metaSnap.val();
       db.ref(`roomIndex/${code}`).set({ name, createdAt, deleted: false });
     });
   });
@@ -238,10 +251,16 @@ function renderRoomList(rooms) {
 function createRoom() {
   const name = document.getElementById('room-name').value.trim() || 'Unnamed Room';
   const code = generateCode();
-  const meta = { name, createdAt: Date.now(), deleted: false };
-  db.ref(`rooms/${code}/meta`).set(meta)
-    .then(() => db.ref(`roomIndex/${code}`).set({ name, createdAt: meta.createdAt, deleted: false }))
-    .then(() => goToTimer(code, name))
+  db.ref(`rooms/${code}/meta`).get()
+    .then(snap => {
+      if (snap.exists()) { createRoom(); return; } // code already taken — roll a new one
+      const meta = { name, createdAt: syncedNow(), deleted: false };
+      // Single atomic write so the room and the lobby index can't diverge
+      return db.ref().update({
+        [`rooms/${code}/meta`]: meta,
+        [`roomIndex/${code}`]: meta,
+      }).then(() => goToTimer(code, name));
+    })
     .catch(err => alert('Could not create room: ' + err.message));
 }
 
@@ -293,8 +312,10 @@ function saveRoomName() {
   const name = document.getElementById('rename-input').value.trim();
   if (!name || !currentRoom) return;
   currentRoomName = name;
-  db.ref(`rooms/${currentRoom}/meta/name`).set(name);
-  db.ref(`roomIndex/${currentRoom}/name`).set(name);
+  db.ref().update({
+    [`rooms/${currentRoom}/meta/name`]: name,
+    [`roomIndex/${currentRoom}/name`]: name,
+  });
   updateBadge(name, currentRoom);
   hideMenu();
 }
@@ -308,15 +329,14 @@ function leaveRoom() {
 function deleteRoom() {
   hideMenu();
   const code = currentRoom;
-  if (!confirm(`Delete room "${code}"?\n\nThis removes all timestamps for everyone in the room.`)) return;
+  if (!confirm(`Delete room "${code}"?\n\nThe room will close for everyone in it.`)) return;
 
-  db.ref(`rooms/${code}/meta/deleted`).set(true).then(() => {
-    db.ref(`roomIndex/${code}/deleted`).set(true);
-    setTimeout(() => {
-      db.ref(`rooms/${code}`).remove();
-      db.ref(`roomIndex/${code}`).remove();
-    }, 3000);
-  });
+  // Soft delete: mark the room deleted (atomically, in both places) but keep
+  // the data, so an accidental delete never destroys recorded times.
+  db.ref().update({
+    [`rooms/${code}/meta/deleted`]: true,
+    [`roomIndex/${code}/deleted`]: true,
+  }).catch(err => alert('Could not delete room: ' + err.message));
 
   localStorage.removeItem(ROOM_KEY);
   showDeletedBanner();
@@ -334,13 +354,9 @@ function showDeletedBanner() {
 
 function logStamp(type) {
   if (!currentRoom) return;
-  const now = new Date();
   const rec = {
     type,
-    time: formatStamp(now),
-    date: formatDate(now),
-    iso: now.toISOString(),
-    epoch_ms: now.getTime(),
+    epoch_ms: syncedNow(),
     athlete: document.getElementById('athlete').value.trim(),
     operator: document.getElementById('operator').value.trim(),
     note: document.getElementById('note').value.trim()
@@ -348,16 +364,8 @@ function logStamp(type) {
   const ref = db.ref(`rooms/${currentRoom}/stamps`).push();
   ref.set(rec);
   document.getElementById('last').innerHTML =
-    `<span class="last-time">${rec.time}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
+    `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
   if (navigator.vibrate) navigator.vibrate(35);
-}
-
-// ── Finish button state ─────────────────────────────────────────────────────
-
-function updateFinishBtn() {
-  // Anyone can finish, whether or not a matching start exists — mismatched
-  // names are easy to reconcile afterwards by editing the stamps.
-  document.querySelector('.finish').disabled = false;
 }
 
 // ── Active racers ───────────────────────────────────────────────────────────
@@ -366,16 +374,18 @@ function renderActiveRacers() {
   const el = document.getElementById('active-racers');
   if (!el) return;
 
-  // stamps are already sorted by epoch_ms ascending, so last write wins
-  const lastType = {};
+  // stamps are already sorted by epoch_ms ascending, so last write wins.
+  // Key by normalized name so "214 " and "214" are the same racer.
+  const lastByKey = new Map();
   stamps.forEach(s => {
-    if (!s.athlete) return;
-    lastType[s.athlete] = s.type;
+    const key = normAthlete(s.athlete);
+    if (!key) return;
+    lastByKey.set(key, { display: (s.athlete || '').trim(), type: s.type });
   });
 
-  const active = Object.entries(lastType)
-    .filter(([, type]) => type === 'START')
-    .map(([athlete]) => athlete);
+  const active = [...lastByKey.values()]
+    .filter(e => e.type === 'START')
+    .map(e => e.display);
 
   if (!active.length) {
     el.classList.add('hidden');
@@ -387,7 +397,6 @@ function renderActiveRacers() {
   el.querySelectorAll('.active-racer-name').forEach(span => {
     span.onclick = () => {
       document.getElementById('athlete').value = span.dataset.athlete;
-      updateFinishBtn();
     };
   });
 }
@@ -410,8 +419,8 @@ function render() {
     tr.innerHTML = `
       <td>${n}${r.editedAt ? '<span class="edited-dot"></span>' : ''}</td>
       <td>${escapeHtml(r.type)}${unmatched ? '<span class="unmatched-dot" title="No matching start"></span>' : ''}</td>
-      <td>${escapeHtml(r.time)}</td>
-      <td>${escapeHtml(r.date)}</td>
+      <td>${stampTime(r.epoch_ms)}</td>
+      <td>${stampDate(r.epoch_ms)}</td>
       <td>${escapeHtml(r.athlete)}</td>
       <td>${escapeHtml(r.operator)}</td>
       <td>${escapeHtml(r.note)}</td>`;
@@ -426,7 +435,14 @@ function csvText() {
   const header = ['n', 'type', 'date', 'time', 'iso', 'time_ms', 'epoch_ms', 'athlete', 'operator', 'note'];
   const lines = [header.join(',')];
   stamps.forEach((r, i) => {
-    const row = { ...r, n: i + 1, time_ms: formatTimeMs(r.epoch_ms) };
+    const row = {
+      ...r,
+      n: i + 1,
+      date: stampDate(r.epoch_ms),
+      time: stampTime(r.epoch_ms),
+      iso: typeof r.epoch_ms === 'number' ? new Date(r.epoch_ms).toISOString() : '',
+      time_ms: formatTimeMs(r.epoch_ms),
+    };
     lines.push(header.map(k => esc(row[k])).join(','));
   });
 
@@ -623,7 +639,7 @@ function openEditSheet(key) {
   const stamp = stamps.find(s => s._key === key);
   if (!stamp) return;
   editingKey = key;
-  document.getElementById('edit-sheet-title').textContent = `${stamp.type} · ${stamp.time}`;
+  document.getElementById('edit-sheet-title').textContent = `${stamp.type} · ${stampTime(stamp.epoch_ms)}`;
   document.getElementById('edit-athlete').value = stamp.athlete || '';
   document.getElementById('edit-operator').value = stamp.operator || '';
   document.getElementById('edit-note').value = stamp.note || '';
@@ -671,7 +687,7 @@ function saveEdit() {
     athlete:  document.getElementById('edit-athlete').value.trim(),
     operator: document.getElementById('edit-operator').value.trim(),
     note:     document.getElementById('edit-note').value.trim(),
-    editedAt: Date.now(),
+    editedAt: syncedNow(),
   };
   db.ref(`rooms/${currentRoom}/stamps/${editingKey}`).update(updates);
   closeEditSheet();
@@ -707,7 +723,7 @@ function saveEdit() {
   });
 
   const athleteInput = document.getElementById('athlete');
-  athleteInput.addEventListener('input', () => { updateFinishBtn(); updateAthleteSuggestions(); });
+  athleteInput.addEventListener('input', updateAthleteSuggestions);
   athleteInput.addEventListener('focus', updateAthleteSuggestions);
   athleteInput.addEventListener('blur', () => setTimeout(hideAthleteSuggest, 100));
   document.getElementById('athlete-suggest').addEventListener('pointerdown', e => {
@@ -716,7 +732,6 @@ function saveEdit() {
     e.preventDefault(); // keep focus; avoid a blur race hiding the list first
     athleteInput.value = item.dataset.name;
     hideAthleteSuggest();
-    updateFinishBtn();
   });
 
   // Lookup: pick a filtered athlete (delegated so it survives re-renders)
