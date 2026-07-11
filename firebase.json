@@ -10,7 +10,8 @@
       ".gitignore",
       "firebase.example.js",
       "database.rules.json",
-      "**/.*"
+      "**/.*",
+      "**/.*/**"
     ],
     "headers": [
       {
