@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "time-trial-timer-e19dd"
-  }
+  },
+  "targets": {
+    "time-trial-timer-e19dd": {
+      "hosting": {
+        "main": [
+          "gl-timer"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
