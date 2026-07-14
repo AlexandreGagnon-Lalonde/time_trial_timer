@@ -17,7 +17,7 @@
         browser: tap the <strong>•••</strong> menu, then <strong>Open in
         browser</strong> (Safari / Chrome).
       </span>
-      <button class="inapp-banner-close" onclick="dismissInAppBanner()">✕</button>
+      <button id="inapp-close" class="inapp-banner-close">✕</button>
     </div>
 
     <!-- Hold / "armed" overlay while a stamp button is pressed -->
@@ -45,7 +45,7 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <button class="btn-create" onclick="createRoom()">Create Room</button>
+        <button id="btn-create" class="btn-create">Create Room</button>
 
         <div class="lobby-live-rooms">
           <div class="lobby-live-title">
@@ -67,7 +67,7 @@
             autocapitalize="characters"
             spellcheck="false"
           />
-          <button class="btn-join" onclick="joinRoomFromInput()">Join</button>
+          <button id="btn-join" class="btn-join">Join</button>
         </div>
       </div>
     </div>
@@ -77,7 +77,7 @@
       <div class="wrap">
         <div class="header-row">
           <div id="spectate-badge" class="room-badge"></div>
-          <button class="spectate-back" onclick="leaveSpectate()">✕</button>
+          <button id="spectate-back" class="spectate-back">✕</button>
         </div>
         <div class="spectate-updated-row">
           <span class="live-dot"></span>
@@ -93,29 +93,29 @@
         <div class="header-row">
           <div id="room-badge" class="room-badge"></div>
           <div class="menu-wrapper">
-            <button class="menu-btn" onclick="toggleMenu()">⋮</button>
+            <button id="menu-btn" class="menu-btn">⋮</button>
             <div id="room-menu" class="room-menu">
               <div class="menu-top">
                 <span class="menu-label">Options</span>
-                <button class="menu-close-btn" onclick="hideMenu()">✕</button>
+                <button id="menu-close" class="menu-close-btn">✕</button>
               </div>
-              <button class="menu-item" onclick="openLookup()">Athlete Lookup</button>
-              <button class="menu-item" onclick="downloadCSV()">Download CSV</button>
-              <button class="menu-item" onclick="toggleRenameField()">Rename Room</button>
+              <button id="menu-lookup" class="menu-item">Athlete Lookup</button>
+              <button id="menu-csv" class="menu-item">Download CSV</button>
+              <button id="menu-rename" class="menu-item">Rename Room</button>
               <div id="rename-section" class="rename-section hidden">
                 <input id="rename-input" maxlength="40" placeholder="New room name" />
-                <button class="rename-save" onclick="saveRoomName()">Save</button>
+                <button id="rename-save" class="rename-save">Save</button>
               </div>
-              <button class="menu-item" onclick="leaveRoom()">Leave Room</button>
-              <button class="menu-item danger" onclick="deleteRoom()">Delete Room</button>
+              <button id="menu-leave" class="menu-item">Leave Room</button>
+              <button id="menu-delete" class="menu-item danger">Delete Room</button>
             </div>
           </div>
         </div>
 
         <div id="deleted-banner" class="deleted-banner hidden">
           <strong>This room was deleted.</strong>
-          <button onclick="downloadCSV()">Export CSV</button>
-          <button onclick="goToLobby()">Back to Lobby</button>
+          <button id="deleted-export">Export CSV</button>
+          <button id="deleted-lobby">Back to Lobby</button>
         </div>
 
         <div id="clock" class="clock">
@@ -165,16 +165,12 @@
     </div>
 
     <!-- EDIT SHEET -->
-    <div
-      id="edit-overlay"
-      class="edit-overlay hidden"
-      onclick="closeEditSheet()"
-    ></div>
+    <div id="edit-overlay" class="edit-overlay hidden"></div>
     <div id="edit-sheet" class="edit-sheet hidden">
       <div class="edit-sheet-handle"></div>
       <div class="edit-sheet-header">
         <span id="edit-sheet-title" class="edit-sheet-title"></span>
-        <button class="edit-sheet-close" onclick="closeEditSheet()">✕</button>
+        <button id="edit-close" class="edit-sheet-close">✕</button>
       </div>
       <label for="edit-athlete">Athlete</label>
       <input id="edit-athlete" inputmode="text" />
@@ -183,22 +179,18 @@
       <label for="edit-note">Note</label>
       <input id="edit-note" />
       <div class="edit-sheet-actions">
-        <button class="edit-cancel" onclick="closeEditSheet()">Cancel</button>
-        <button class="edit-save" onclick="saveEdit()">Save</button>
+        <button id="edit-cancel" class="edit-cancel">Cancel</button>
+        <button id="edit-save" class="edit-save">Save</button>
       </div>
     </div>
 
     <!-- LOOKUP SHEET -->
-    <div
-      id="lookup-overlay"
-      class="edit-overlay hidden"
-      onclick="closeLookup()"
-    ></div>
+    <div id="lookup-overlay" class="edit-overlay hidden"></div>
     <div id="lookup-sheet" class="edit-sheet hidden">
       <div class="edit-sheet-handle"></div>
       <div class="edit-sheet-header">
         <span class="edit-sheet-title">Athlete Lookup</span>
-        <button class="edit-sheet-close" onclick="closeLookup()">✕</button>
+        <button id="lookup-close" class="edit-sheet-close">✕</button>
       </div>
       <input
         id="lookup-input"
@@ -206,7 +198,6 @@
         inputmode="text"
         placeholder="Type an athlete…"
         autocomplete="off"
-        oninput="renderLookupOptions()"
       />
       <div id="lookup-options" class="lookup-options"></div>
       <div id="lookup-result" class="lookup-result"></div>
@@ -215,6 +206,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     <script src="firebase.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>

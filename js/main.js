@@ -1,10 +1,18 @@
+// Entry point: screens, lobby, rooms, stamping, spectate and the edit/lookup
+// sheets. Pure logic (formatting, athlete pairing, CSV) lives in the sibling
+// modules; this file owns the DOM and the Firebase wiring.
+import { db, firebaseConfig } from './firebase-db.js';
+import { state } from './state.js';
+import { escapeHtml, formatStamp, formatDate, formatElapsed, stampTime, stampDate } from './format.js';
+import { normAthlete, getFinishedAthletes, getAthleteIndex } from './results.js';
+import { connectDb, disconnectDb, syncedNow } from './clock.js';
+import { enableWakeLock, disableWakeLock } from './wake-lock.js';
+import { downloadCSV } from './csv.js';
+
 const ROOM_KEY = 'ttt_room_code';
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes O/0 and I/1 to avoid confusion
 
-let currentRoom = null;
-let currentRoomName = '';
-let stamps = [];
-let editingKey = null;
+const $ = id => document.getElementById(id);
 
 // ── In-app browser detection ────────────────────────────────────────────────
 // Messenger/Instagram/Facebook webviews (WKWebView) don't reliably honor
@@ -16,69 +24,7 @@ function isInAppBrowser() {
   return /FBAN|FBAV|FB_IAB|Messenger|Instagram|Line\/|MicroMessenger|Twitter/i.test(ua);
 }
 
-function dismissInAppBanner() {
-  const banner = document.getElementById('inapp-banner');
-  if (banner) banner.classList.add('hidden');
-}
-
-if (isInAppBrowser()) {
-  document.addEventListener('DOMContentLoaded', () => {
-    const banner = document.getElementById('inapp-banner');
-    if (banner) banner.classList.remove('hidden');
-  });
-}
-
 // ── Utility ────────────────────────────────────────────────────────────────
-
-function pad(n, len = 2) { return String(n).padStart(len, '0'); }
-
-function formatStamp(d) {
-  const hundredths = Math.floor(d.getMilliseconds() / 10);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(hundredths)}`;
-}
-
-function formatDate(d) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-// Local date + time with millisecond precision: YYYY-MM-DD HH:MM:SS:XXX
-function formatDateTimeMs(ms) {
-  if (typeof ms !== 'number') return '';
-  const d = new Date(ms);
-  return `${formatDate(d)} ${formatTimeMs(ms)}`;
-}
-
-// Local time with millisecond precision: HH:MM:SS:XXX
-function formatTimeMs(ms) {
-  if (typeof ms !== 'number') return '';
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
-}
-
-// Display strings derived from a stamp's epoch_ms (the single stored time)
-function stampTime(ms) { return typeof ms === 'number' ? formatStamp(new Date(ms)) : ''; }
-function stampDate(ms) { return typeof ms === 'number' ? formatDate(new Date(ms)) : ''; }
-
-// Elapsed duration as M:SS.xx (or H:MM:SS.xx past an hour)
-function formatElapsed(ms) {
-  if (!(ms >= 0)) return '—';
-  const totalHundredths = Math.round(ms / 10);
-  const hundredths = totalHundredths % 100;
-  const totalSeconds = Math.floor(totalHundredths / 100);
-  const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const minutes = totalMinutes % 60;
-  const hours = Math.floor(totalMinutes / 60);
-  return hours > 0
-    ? `${hours}:${pad(minutes)}:${pad(seconds)}.${pad(hundredths)}`
-    : `${minutes}:${pad(seconds)}.${pad(hundredths)}`;
-}
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-  }[c]));
-}
 
 function generateCode() {
   let code = '';
@@ -86,42 +32,20 @@ function generateCode() {
   return code;
 }
 
-// ── Clock ──────────────────────────────────────────────────────────────────
-// Phone clocks can disagree by seconds, so a start on one phone and a finish
-// on another would corrupt the elapsed time. Firebase reports how far this
-// device's clock is from its servers; stamping with the corrected time puts
-// every phone on the same clock.
-let serverTimeOffset = 0;
-let clockSyncStarted = false;
-
-// Only operators hold a live Firebase connection (the free plan caps
-// simultaneous connections at 100). The lobby and the spectator screen read
-// over plain HTTPS instead, so any number of viewers costs zero connections.
-// The socket opens when someone joins a room and closes back in the lobby.
-function connectDb() {
-  if (!clockSyncStarted) {
-    clockSyncStarted = true;
-    db.ref('.info/serverTimeOffset').on('value', snap => {
-      serverTimeOffset = snap.val() || 0;
-    });
-  }
-  db.goOnline();
-}
-
-function syncedNow() { return Date.now() + serverTimeOffset; }
+// ── Clock display ──────────────────────────────────────────────────────────
 
 function tick() {
   const now = new Date(syncedNow());
   const t = formatStamp(now);
   const d = formatDate(now);
-  const timerEl = document.getElementById('clock-time');
-  const dateEl = document.getElementById('date');
+  const timerEl = $('clock-time');
+  const dateEl = $('date');
   if (timerEl) timerEl.textContent = t;
   if (dateEl) dateEl.textContent = d;
-  const holdEl = document.getElementById('hold-clock');
+  const holdEl = $('hold-clock');
   if (holdEl && holdEl.parentElement.classList.contains('showing')) holdEl.textContent = t;
   // Live "on course" timers on the spectator screen
-  if (spectateCode) {
+  if (state.spectateCode) {
     document.querySelectorAll('.oncourse-time').forEach(el => {
       const start = Number(el.dataset.start);
       if (start) el.textContent = formatElapsed(now.getTime() - start);
@@ -134,27 +58,27 @@ function tick() {
 let holdCancelActive = false; // finger currently over the cancel zone
 
 function showHold(type) {
-  const o = document.getElementById('hold-overlay');
+  const o = $('hold-overlay');
   if (!o) return;
   holdCancelActive = false;
   o.classList.remove('start', 'finish', 'in-cancel');
   o.classList.add(type === 'START' ? 'start' : 'finish', 'showing');
-  document.getElementById('hold-type').textContent = type;
-  const athlete = document.getElementById('athlete').value.trim();
-  document.getElementById('hold-athlete').textContent = athlete ? '#' + athlete : '';
+  $('hold-type').textContent = type;
+  const athlete = $('athlete').value.trim();
+  $('hold-athlete').textContent = athlete ? '#' + athlete : '';
   if (navigator.vibrate) navigator.vibrate(20); // Android tactile confirm; iOS ignores
 }
 
 function hideHold() {
-  const o = document.getElementById('hold-overlay');
+  const o = $('hold-overlay');
   if (o) o.classList.remove('showing', 'in-cancel');
 }
 
 // While armed, light up the cancel zone when the finger is over it and flag
 // that releasing there should discard the time instead of recording it.
 function updateHoldCancel(clientY) {
-  const o = document.getElementById('hold-overlay');
-  const zone = document.getElementById('hold-cancel');
+  const o = $('hold-overlay');
+  const zone = $('hold-cancel');
   if (!o || !zone || !o.classList.contains('showing')) return;
   const inZone = clientY >= zone.getBoundingClientRect().top;
   if (inZone !== holdCancelActive) {
@@ -168,38 +92,40 @@ function updateHoldCancel(clientY) {
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(el => el.classList.add('hidden'));
-  document.getElementById(id).classList.remove('hidden');
+  $(id).classList.remove('hidden');
 }
 
 function goToLobby() {
   detachFirebaseListeners();
-  currentRoom = null;
-  stamps = [];
+  state.room = null;
+  state.stamps = [];
   hideMenu();
-  db.goOffline(); // free the live connection; the lobby polls over HTTPS
+  disableWakeLock();
+  disconnectDb(); // free the live connection; the lobby polls over HTTPS
   const saved = localStorage.getItem(ROOM_KEY);
-  if (saved) document.getElementById('join-code').value = saved;
+  if (saved) $('join-code').value = saved;
   startLobbyPolling();
   showScreen('screen-lobby');
 }
 
 function updateBadge(name, code) {
-  const badge = document.getElementById('room-badge');
+  const badge = $('room-badge');
   badge.innerHTML = name
-    ? `${escapeHtml(name)} <span class="badge-code">${code}</span>`
-    : code;
+    ? `${escapeHtml(name)} <span class="badge-code">${escapeHtml(code)}</span>`
+    : escapeHtml(code);
 }
 
 function goToTimer(code, name = '') {
   connectDb();
   stopLobbyPolling();
-  currentRoom = code;
-  currentRoomName = name;
+  state.room = code;
+  state.roomName = name;
   localStorage.setItem(ROOM_KEY, code);
   ensureRoomIndexed(code);
   updateBadge(name, code);
-  document.getElementById('deleted-banner').classList.add('hidden');
+  $('deleted-banner').classList.add('hidden');
   hideMenu();
+  enableWakeLock();
   showScreen('screen-timer');
   subscribeToRoom(code);
 }
@@ -207,18 +133,19 @@ function goToTimer(code, name = '') {
 // ── Firebase listeners ─────────────────────────────────────────────────────
 
 function detachFirebaseListeners() {
-  if (!currentRoom) return;
-  db.ref(`rooms/${currentRoom}/stamps`).off();
-  db.ref(`rooms/${currentRoom}/meta/deleted`).off();
+  if (!state.room) return;
+  db.ref(`rooms/${state.room}/stamps`).off();
+  db.ref(`rooms/${state.room}/meta/deleted`).off();
 }
 
 function subscribeToRoom(code) {
-  stamps = [];
+  state.stamps = [];
 
   db.ref(`rooms/${code}/stamps`).on('value', snap => {
-    stamps = [];
+    const stamps = [];
     snap.forEach(child => { stamps.push({ _key: child.key, ...child.val() }); });
     stamps.sort((a, b) => a.epoch_ms - b.epoch_ms);
+    state.stamps = stamps;
     render();
     renderActiveRacers();
     updateAthleteSuggestions();
@@ -272,14 +199,14 @@ function stopLobbyPolling() {
 }
 
 function renderRoomList(rooms) {
-  const el = document.getElementById('room-list');
+  const el = $('room-list');
   if (!el) return;
   if (!rooms.length) {
     el.innerHTML = '<p class="no-rooms">No active rooms yet.</p>';
     return;
   }
   el.innerHTML = rooms.map(r => `
-    <button type="button" class="room-list-item" data-code="${r.code}" data-name="${escapeHtml(r.name)}">
+    <button type="button" class="room-list-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}">
       <span class="room-list-name">${escapeHtml(r.name)}</span>
       <span class="room-list-view">Results ›</span>
     </button>
@@ -290,7 +217,7 @@ function renderRoomList(rooms) {
 
 function createRoom() {
   connectDb();
-  const name = document.getElementById('room-name').value.trim() || 'Unnamed Room';
+  const name = $('room-name').value.trim() || 'Unnamed Room';
   const code = generateCode();
   db.ref(`rooms/${code}/meta`).get()
     .then(snap => {
@@ -306,7 +233,7 @@ function createRoom() {
 }
 
 function joinRoomFromInput() {
-  const raw = document.getElementById('join-code').value.trim().toUpperCase();
+  const raw = $('join-code').value.trim().toUpperCase();
   if (raw.length !== 4) { alert('Please enter a 4-character room code.'); return; }
   connectDb();
 
@@ -336,29 +263,29 @@ function toggleMenu() {
 
 function hideMenu() {
   document.querySelector('.menu-wrapper').classList.remove('is-open');
-  document.getElementById('rename-section').classList.add('hidden');
+  $('rename-section').classList.add('hidden');
 }
 
 function toggleRenameField() {
-  const section = document.getElementById('rename-section');
+  const section = $('rename-section');
   const isHidden = section.classList.toggle('hidden');
   if (!isHidden) {
-    const input = document.getElementById('rename-input');
-    input.value = currentRoomName;
+    const input = $('rename-input');
+    input.value = state.roomName;
     input.focus();
     input.select();
   }
 }
 
 function saveRoomName() {
-  const name = document.getElementById('rename-input').value.trim();
-  if (!name || !currentRoom) return;
-  currentRoomName = name;
+  const name = $('rename-input').value.trim();
+  if (!name || !state.room) return;
+  state.roomName = name;
   db.ref().update({
-    [`rooms/${currentRoom}/meta/name`]: name,
-    [`roomIndex/${currentRoom}/name`]: name,
+    [`rooms/${state.room}/meta/name`]: name,
+    [`roomIndex/${state.room}/name`]: name,
   });
-  updateBadge(name, currentRoom);
+  updateBadge(name, state.room);
   hideMenu();
 }
 
@@ -370,7 +297,7 @@ function leaveRoom() {
 
 function deleteRoom() {
   hideMenu();
-  const code = currentRoom;
+  const code = state.room;
   if (!confirm(`Delete room "${code}"?\n\nThe room will close for everyone in it.`)) return;
 
   // Soft delete: mark the room deleted (atomically, in both places) but keep
@@ -388,24 +315,24 @@ function deleteRoom() {
 // ── Deleted banner ─────────────────────────────────────────────────────────
 
 function showDeletedBanner() {
-  document.getElementById('deleted-banner').classList.remove('hidden');
+  $('deleted-banner').classList.remove('hidden');
   hideMenu();
 }
 
 // ── Stamp logging ──────────────────────────────────────────────────────────
 
 function logStamp(type) {
-  if (!currentRoom) return;
+  if (!state.room) return;
   const rec = {
     type,
     epoch_ms: syncedNow(),
-    athlete: document.getElementById('athlete').value.trim(),
-    operator: document.getElementById('operator').value.trim(),
-    note: document.getElementById('note').value.trim()
+    athlete: $('athlete').value.trim(),
+    operator: $('operator').value.trim(),
+    note: $('note').value.trim()
   };
-  const ref = db.ref(`rooms/${currentRoom}/stamps`).push();
+  const ref = db.ref(`rooms/${state.room}/stamps`).push();
   ref.set(rec);
-  document.getElementById('last').innerHTML =
+  $('last').innerHTML =
     `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
   if (navigator.vibrate) navigator.vibrate(35);
 }
@@ -413,13 +340,13 @@ function logStamp(type) {
 // ── Active racers ───────────────────────────────────────────────────────────
 
 function renderActiveRacers() {
-  const el = document.getElementById('active-racers');
+  const el = $('active-racers');
   if (!el) return;
 
   // stamps are already sorted by epoch_ms ascending, so last write wins.
   // Key by normalized name so "214 " and "214" are the same racer.
   const lastByKey = new Map();
-  stamps.forEach(s => {
+  state.stamps.forEach(s => {
     const key = normAthlete(s.athlete);
     if (!key) return;
     lastByKey.set(key, { display: (s.athlete || '').trim(), type: s.type });
@@ -438,7 +365,7 @@ function renderActiveRacers() {
   el.innerHTML = active.map(a => `<span class="active-racer-name" data-athlete="${escapeHtml(a)}">${escapeHtml(a)}</span>`).join(' · ');
   el.querySelectorAll('.active-racer-name').forEach(span => {
     span.onclick = () => {
-      document.getElementById('athlete').value = span.dataset.athlete;
+      $('athlete').value = span.dataset.athlete;
     };
   });
 }
@@ -446,14 +373,14 @@ function renderActiveRacers() {
 // ── Render ─────────────────────────────────────────────────────────────────
 
 function render() {
-  const tbody = document.getElementById('rows');
+  const tbody = $('rows');
   if (!tbody) return;
   // Athletes who have a start, for flagging finishes that can't be paired.
   const startedKeys = new Set();
-  stamps.forEach(s => { if (s.type === 'START') startedKeys.add(normAthlete(s.athlete)); });
+  state.stamps.forEach(s => { if (s.type === 'START') startedKeys.add(normAthlete(s.athlete)); });
   tbody.innerHTML = '';
-  stamps.slice().reverse().forEach((r, i) => {
-    const n = stamps.length - i;
+  state.stamps.slice().reverse().forEach((r, i) => {
+    const n = state.stamps.length - i;
     const unmatched = r.type === 'FINISH' && !startedKeys.has(normAthlete(r.athlete));
     const tr = document.createElement('tr');
     tr.className = 'row-clickable' + (unmatched ? ' row-unmatched' : '');
@@ -470,138 +397,24 @@ function render() {
   });
 }
 
-// ── CSV ────────────────────────────────────────────────────────────────────
-
-function csvText() {
-  const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const header = ['n', 'type', 'date', 'time', 'iso', 'time_ms', 'epoch_ms', 'athlete', 'operator', 'note'];
-  const lines = [header.join(',')];
-  stamps.forEach((r, i) => {
-    const row = {
-      ...r,
-      n: i + 1,
-      date: stampDate(r.epoch_ms),
-      time: stampTime(r.epoch_ms),
-      iso: typeof r.epoch_ms === 'number' ? new Date(r.epoch_ms).toISOString() : '',
-      time_ms: formatTimeMs(r.epoch_ms),
-    };
-    lines.push(header.map(k => esc(row[k])).join(','));
-  });
-
-  // Second section: finished athletes with their finish (elapsed) time,
-  // offset to begin on the 4th column so it sits clear of the main table.
-  const finished = getFinishedAthletes();
-  if (finished.length) {
-    const indent = ',,,';
-    lines.push('');
-    lines.push(indent + 'Finished Athletes');
-    lines.push(indent + ['athlete', 'start', 'finish', 'elapsed'].join(','));
-    finished.forEach(f => {
-      lines.push(indent + [
-        esc(f.athlete),
-        esc(formatDateTimeMs(f.startMs)),
-        esc(formatDateTimeMs(f.finishMs)),
-        esc(formatElapsed(f.elapsedMs)),
-      ].join(','));
-    });
-  }
-  return lines.join('\n');
-}
-
-async function copyCSV() {
-  try {
-    await navigator.clipboard.writeText(csvText());
-    alert('CSV copied. Paste it into Google Sheets or Excel.');
-  } catch {
-    prompt('Copy this CSV:', csvText());
-  }
-}
-
-function downloadCSV() {
-  const blob = new Blob([csvText()], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `timestamps-${currentRoom}-${formatDate(new Date())}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// ── Athlete lookup ───────────────────────────────────────────────────────
-// Match athletes case- and whitespace-insensitively so "Stephanie",
-// "stephanie" and " Stephanie " count as the same person.
-function normAthlete(s) {
-  return (s || '').trim().toLowerCase();
-}
-
-// Build the list of athletes with both a start and a finish, computing each
-// one's elapsed time from the earliest start to the first finish after it.
-function getFinishedAthletes(list = stamps) {
-  const byKey = {};
-  list.forEach(s => {
-    const key = normAthlete(s.athlete);
-    if (!key || typeof s.epoch_ms !== 'number') return;
-    (byKey[key] = byKey[key] || { display: (s.athlete || '').trim(), starts: [], finishes: [] });
-    if (s.type === 'START') byKey[key].starts.push(s.epoch_ms);
-    else if (s.type === 'FINISH') byKey[key].finishes.push(s.epoch_ms);
-  });
-  const out = [];
-  Object.values(byKey).forEach(({ display, starts, finishes }) => {
-    if (!starts.length || !finishes.length) return;
-    const startMs = Math.min(...starts);
-    const after = finishes.filter(f => f >= startMs).sort((x, y) => x - y);
-    const finishMs = after.length ? after[0] : Math.max(...finishes);
-    out.push({
-      athlete: display,
-      startMs,
-      finishMs,
-      elapsedMs: finishMs - startMs,
-      multiStart: starts.length > 1,
-      multiFinish: finishes.length > 1,
-    });
-  });
-  out.sort((a, b) => a.athlete.localeCompare(b.athlete, undefined, { numeric: true }));
-  return out;
-}
-
-// Distinct athlete names seen, each tagged with whether they've started and
-// finished. Used for autocomplete suggestions and unmatched-finish flags.
-function getAthleteIndex(list = stamps) {
-  const seen = new Map();
-  list.forEach(s => {
-    const key = normAthlete(s.athlete);
-    if (!key) return;
-    if (!seen.has(key)) seen.set(key, { key, display: (s.athlete || '').trim(), started: false, finished: false, startMs: null });
-    const e = seen.get(key);
-    if (s.type === 'START') {
-      e.started = true;
-      if (typeof s.epoch_ms === 'number' && (e.startMs === null || s.epoch_ms < e.startMs)) e.startMs = s.epoch_ms;
-    } else if (s.type === 'FINISH') {
-      e.finished = true;
-    }
-  });
-  return seen;
-}
-
+// ── Athlete suggestions ────────────────────────────────────────────────────
 // Custom suggestion dropdown for the athlete field (a native <datalist> stacks
 // with the browser's own autofill popup and behaves inconsistently). Shows only
 // athletes who've started but not finished, filtered to what's typed; hidden
 // when the field is blank, unfocused, has no match, or exactly matches a name.
 function hideAthleteSuggest() {
-  const box = document.getElementById('athlete-suggest');
+  const box = $('athlete-suggest');
   if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
 }
 
 function updateAthleteSuggestions() {
-  const box = document.getElementById('athlete-suggest');
-  const input = document.getElementById('athlete');
+  const box = $('athlete-suggest');
+  const input = $('athlete');
   if (!box || !input) return;
   if (document.activeElement !== input) return hideAthleteSuggest();
   const q = normAthlete(input.value);
   if (!q) return hideAthleteSuggest();
-  const matches = [...getAthleteIndex().values()]
+  const matches = [...getAthleteIndex(state.stamps).values()]
     .filter(e => e.started && !e.finished && normAthlete(e.display).includes(q))
     .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
   if (!matches.length || matches.some(e => normAthlete(e.display) === q)) return hideAthleteSuggest();
@@ -611,28 +424,30 @@ function updateAthleteSuggestions() {
   box.classList.remove('hidden');
 }
 
+// ── Athlete lookup ─────────────────────────────────────────────────────────
+
 function openLookup() {
   hideMenu();
-  document.getElementById('lookup-input').value = '';
-  document.getElementById('lookup-result').innerHTML = '';
+  $('lookup-input').value = '';
+  $('lookup-result').innerHTML = '';
   renderLookupOptions();
-  document.getElementById('lookup-overlay').classList.remove('hidden');
-  document.getElementById('lookup-sheet').classList.remove('hidden');
+  $('lookup-overlay').classList.remove('hidden');
+  $('lookup-sheet').classList.remove('hidden');
   bindKeyboardTracking();
 }
 
 function closeLookup() {
-  document.getElementById('lookup-overlay').classList.add('hidden');
-  document.getElementById('lookup-sheet').classList.add('hidden');
+  $('lookup-overlay').classList.add('hidden');
+  $('lookup-sheet').classList.add('hidden');
   unbindKeyboardTracking();
 }
 
 // Filter the finished-athlete list by what's typed; show an exact match's result.
 function renderLookupOptions() {
-  const q = document.getElementById('lookup-input').value.trim().toLowerCase();
-  const opts = document.getElementById('lookup-options');
-  const result = document.getElementById('lookup-result');
-  const finished = getFinishedAthletes();
+  const q = $('lookup-input').value.trim().toLowerCase();
+  const opts = $('lookup-options');
+  const result = $('lookup-result');
+  const finished = getFinishedAthletes(state.stamps);
   if (!finished.length) {
     opts.innerHTML = '<p class="lookup-empty">No athlete has both a start and a finish yet.</p>';
     result.innerHTML = '';
@@ -653,15 +468,15 @@ function renderLookupOptions() {
 }
 
 function selectLookupAthlete(name) {
-  document.getElementById('lookup-input').value = name;
-  document.getElementById('lookup-options').innerHTML = '';
-  document.getElementById('lookup-input').blur();
+  $('lookup-input').value = name;
+  $('lookup-options').innerHTML = '';
+  $('lookup-input').blur();
   showLookupResult(name);
 }
 
 function showLookupResult(athlete) {
-  const el = document.getElementById('lookup-result');
-  const f = getFinishedAthletes().find(x => x.athlete === athlete);
+  const el = $('lookup-result');
+  const f = getFinishedAthletes(state.stamps).find(x => x.athlete === athlete);
   if (!f) { el.innerHTML = ''; return; }
   const parts = [];
   if (f.multiStart) parts.push('starts');
@@ -681,15 +496,14 @@ function showLookupResult(athlete) {
 
 // ── Spectate (read-only results, polled over HTTPS) ───────────────────────
 
-let spectateCode = null;
 let spectatePollTimer = null;
 
 function enterSpectate(code, name) {
-  spectateCode = code;
+  state.spectateCode = code;
   stopLobbyPolling();
   updateSpectateBadge(name || code, code);
-  document.getElementById('spectate-updated').textContent = 'Loading…';
-  document.getElementById('spectate-content').innerHTML = '';
+  $('spectate-updated').textContent = 'Loading…';
+  $('spectate-content').innerHTML = '';
   showScreen('screen-spectate');
   fetchSpectate();
   clearInterval(spectatePollTimer);
@@ -697,36 +511,36 @@ function enterSpectate(code, name) {
 }
 
 function leaveSpectate() {
-  spectateCode = null;
+  state.spectateCode = null;
   clearInterval(spectatePollTimer);
   spectatePollTimer = null;
   goToLobby();
 }
 
 function updateSpectateBadge(name, code) {
-  document.getElementById('spectate-badge').innerHTML =
-    `${escapeHtml(name)} <span class="badge-code">${code}</span>`;
+  $('spectate-badge').innerHTML =
+    `${escapeHtml(name)} <span class="badge-code">${escapeHtml(code)}</span>`;
 }
 
 function fetchSpectate() {
-  if (!spectateCode || document.hidden) return;
-  const code = spectateCode;
+  if (!state.spectateCode || document.hidden) return;
+  const code = state.spectateCode;
   fetch(`${firebaseConfig.databaseURL}/rooms/${code}.json`)
     .then(r => r.json())
     .then(data => {
-      if (code !== spectateCode) return; // left the screen mid-fetch
+      if (code !== state.spectateCode) return; // left the screen mid-fetch
       renderSpectate(data, code);
-      document.getElementById('spectate-updated').textContent =
+      $('spectate-updated').textContent =
         `Updated ${formatStamp(new Date()).slice(0, 8)} · refreshes automatically`;
     })
     .catch(() => {
-      if (code !== spectateCode) return;
-      document.getElementById('spectate-updated').textContent = 'Offline — retrying…';
+      if (code !== state.spectateCode) return;
+      $('spectate-updated').textContent = 'Offline — retrying…';
     });
 }
 
 function renderSpectate(data, code) {
-  const content = document.getElementById('spectate-content');
+  const content = $('spectate-content');
   if (!data || !data.meta || data.meta.deleted) {
     content.innerHTML = '<p class="spectate-empty">This room is no longer available.</p>';
     return;
@@ -767,23 +581,23 @@ function renderSpectate(data, code) {
 // ── Edit sheet ─────────────────────────────────────────────────────────────
 
 function openEditSheet(key) {
-  const stamp = stamps.find(s => s._key === key);
+  const stamp = state.stamps.find(s => s._key === key);
   if (!stamp) return;
-  editingKey = key;
-  document.getElementById('edit-sheet-title').textContent = `${stamp.type} · ${stampTime(stamp.epoch_ms)}`;
-  document.getElementById('edit-athlete').value = stamp.athlete || '';
-  document.getElementById('edit-operator').value = stamp.operator || '';
-  document.getElementById('edit-note').value = stamp.note || '';
-  document.getElementById('edit-overlay').classList.remove('hidden');
-  document.getElementById('edit-sheet').classList.remove('hidden');
+  state.editingKey = key;
+  $('edit-sheet-title').textContent = `${stamp.type} · ${stampTime(stamp.epoch_ms)}`;
+  $('edit-athlete').value = stamp.athlete || '';
+  $('edit-operator').value = stamp.operator || '';
+  $('edit-note').value = stamp.note || '';
+  $('edit-overlay').classList.remove('hidden');
+  $('edit-sheet').classList.remove('hidden');
   bindKeyboardTracking();
-  document.getElementById('edit-note').focus();
+  $('edit-note').focus();
 }
 
 function closeEditSheet() {
-  editingKey = null;
-  document.getElementById('edit-overlay').classList.add('hidden');
-  document.getElementById('edit-sheet').classList.add('hidden');
+  state.editingKey = null;
+  $('edit-overlay').classList.add('hidden');
+  $('edit-sheet').classList.add('hidden');
   unbindKeyboardTracking();
 }
 
@@ -813,37 +627,72 @@ function unbindKeyboardTracking() {
 }
 
 function saveEdit() {
-  if (!editingKey || !currentRoom) return;
+  if (!state.editingKey || !state.room) return;
   const updates = {
-    athlete:  document.getElementById('edit-athlete').value.trim(),
-    operator: document.getElementById('edit-operator').value.trim(),
-    note:     document.getElementById('edit-note').value.trim(),
+    athlete:  $('edit-athlete').value.trim(),
+    operator: $('edit-operator').value.trim(),
+    note:     $('edit-note').value.trim(),
     editedAt: syncedNow(),
   };
-  db.ref(`rooms/${currentRoom}/stamps/${editingKey}`).update(updates);
+  db.ref(`rooms/${state.room}/stamps/${state.editingKey}`).update(updates);
   closeEditSheet();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
-(function init() {
-  db.goOffline(); // no live connection until someone joins a room as operator
+function init() {
+  disconnectDb(); // no live connection until someone joins a room as operator
   tick();
   startLobbyPolling();
   const saved = localStorage.getItem(ROOM_KEY);
-  if (saved) document.getElementById('join-code').value = saved;
+  if (saved) $('join-code').value = saved;
   showScreen('screen-lobby');
 
+  if (isInAppBrowser()) $('inapp-banner').classList.remove('hidden');
+  $('inapp-close').addEventListener('click', () => $('inapp-banner').classList.add('hidden'));
+
+  // Lobby
+  $('btn-create').addEventListener('click', createRoom);
+  $('btn-join').addEventListener('click', joinRoomFromInput);
+
   // Tap a live room to watch its results (read-only)
-  document.getElementById('room-list').addEventListener('click', e => {
+  $('room-list').addEventListener('click', e => {
     const item = e.target.closest('.room-list-item');
     if (item) enterSpectate(item.dataset.code, item.dataset.name || '');
   });
 
+  // Spectate
+  $('spectate-back').addEventListener('click', leaveSpectate);
+
+  // Menu
+  $('menu-btn').addEventListener('click', toggleMenu);
+  $('menu-close').addEventListener('click', hideMenu);
+  $('menu-lookup').addEventListener('click', openLookup);
+  $('menu-csv').addEventListener('click', downloadCSV);
+  $('menu-rename').addEventListener('click', toggleRenameField);
+  $('rename-save').addEventListener('click', saveRoomName);
+  $('menu-leave').addEventListener('click', leaveRoom);
+  $('menu-delete').addEventListener('click', deleteRoom);
+
+  // Deleted-room banner
+  $('deleted-export').addEventListener('click', downloadCSV);
+  $('deleted-lobby').addEventListener('click', goToLobby);
+
+  // Edit sheet
+  $('edit-overlay').addEventListener('click', closeEditSheet);
+  $('edit-close').addEventListener('click', closeEditSheet);
+  $('edit-cancel').addEventListener('click', closeEditSheet);
+  $('edit-save').addEventListener('click', saveEdit);
+
+  // Lookup sheet
+  $('lookup-overlay').addEventListener('click', closeLookup);
+  $('lookup-close').addEventListener('click', closeLookup);
+  $('lookup-input').addEventListener('input', renderLookupOptions);
+
   // Refresh polled data as soon as the tab becomes visible again
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    if (spectateCode) fetchSpectate();
+    if (state.spectateCode) fetchSpectate();
     else if (lobbyPollTimer) fetchRoomList();
   });
 
@@ -853,22 +702,21 @@ function saveEdit() {
     if (wrapper && !wrapper.contains(e.target)) hideMenu();
   });
 
-
   // Allow pressing Enter to join
-  document.getElementById('join-code').addEventListener('keydown', e => {
+  $('join-code').addEventListener('keydown', e => {
     if (e.key === 'Enter') joinRoomFromInput();
   });
 
   // Allow pressing Enter to save room rename
-  document.getElementById('rename-input').addEventListener('keydown', e => {
+  $('rename-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') saveRoomName();
   });
 
-  const athleteInput = document.getElementById('athlete');
+  const athleteInput = $('athlete');
   athleteInput.addEventListener('input', updateAthleteSuggestions);
   athleteInput.addEventListener('focus', updateAthleteSuggestions);
   athleteInput.addEventListener('blur', () => setTimeout(hideAthleteSuggest, 100));
-  document.getElementById('athlete-suggest').addEventListener('pointerdown', e => {
+  $('athlete-suggest').addEventListener('pointerdown', e => {
     const item = e.target.closest('.suggest-item');
     if (!item) return;
     e.preventDefault(); // keep focus; avoid a blur race hiding the list first
@@ -877,7 +725,7 @@ function saveEdit() {
   });
 
   // Lookup: pick a filtered athlete (delegated so it survives re-renders)
-  document.getElementById('lookup-options').addEventListener('click', e => {
+  $('lookup-options').addEventListener('click', e => {
     const btn = e.target.closest('.lookup-option');
     if (btn) selectLookupAthlete(btn.dataset.athlete);
   });
@@ -903,4 +751,6 @@ function saveEdit() {
     btn.addEventListener('pointercancel',() => { btn.classList.remove('is-pressed'); hideHold(); });
     btn.addEventListener('contextmenu',  e => e.preventDefault());
   });
-})();
+}
+
+init();
