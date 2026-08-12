@@ -501,7 +501,7 @@ let spectatePollTimer = null;
 function enterSpectate(code, name) {
   state.spectateCode = code;
   stopLobbyPolling();
-  updateSpectateBadge(name || code, code);
+  updateSpectateBadge(name || 'Live results');
   $('spectate-updated').textContent = 'Loading…';
   $('spectate-content').innerHTML = '';
   showScreen('screen-spectate');
@@ -517,9 +517,10 @@ function leaveSpectate() {
   goToLobby();
 }
 
-function updateSpectateBadge(name, code) {
-  $('spectate-badge').innerHTML =
-    `${escapeHtml(name)} <span class="badge-code">${escapeHtml(code)}</span>`;
+// Spectators only see the room name — never the join code, so someone
+// watching results can't use it to enter the room as an operator.
+function updateSpectateBadge(name) {
+  $('spectate-badge').innerHTML = escapeHtml(name);
 }
 
 function fetchSpectate() {
@@ -545,7 +546,7 @@ function renderSpectate(data, code) {
     content.innerHTML = '<p class="spectate-empty">This room is no longer available.</p>';
     return;
   }
-  updateSpectateBadge(data.meta.name || code, code);
+  updateSpectateBadge(data.meta.name || 'Live results');
 
   const list = Object.values(data.stamps || {})
     .filter(s => s && typeof s.epoch_ms === 'number')
