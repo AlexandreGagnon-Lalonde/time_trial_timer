@@ -2,31 +2,60 @@
   "database": {
     "rules": "database.rules.json"
   },
-  "hosting": {
-    "target": "main",
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      ".firebaserc",
-      ".gitignore",
-      "firebase.example.js",
-      "database.rules.json",
-      "**/.*",
-      "**/.*/**"
-    ],
-    "headers": [
-      {
-        "source": "**/*.@(html|js|css)",
-        "headers": [
-          { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
-        ]
-      },
-      {
-        "source": "/",
-        "headers": [
-          { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
-        ]
-      }
-    ]
-  }
+  "hosting": [
+    {
+      "target": "main",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        ".gitignore",
+        "firebase.example.js",
+        "database.rules.json",
+        "**/.*",
+        "**/.*/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(html|js|css)",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        },
+        {
+          "source": "/",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "legacy",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        ".firebaserc",
+        ".gitignore",
+        "firebase.example.js",
+        "database.rules.json",
+        "**/.*",
+        "**/.*/**"
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(html|js|css)",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        },
+        {
+          "source": "/",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" }
+          ]
+        }
+      ]
+    }
+  ]
 }

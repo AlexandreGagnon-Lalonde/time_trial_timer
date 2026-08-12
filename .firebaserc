@@ -7,6 +7,9 @@
       "hosting": {
         "main": [
           "gl-timer"
+        ],
+        "legacy": [
+          "time-trial-timer-e19dd"
         ]
       }
     }
