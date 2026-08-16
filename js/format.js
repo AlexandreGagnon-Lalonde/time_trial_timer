@@ -11,18 +11,18 @@ export function formatDate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Local date + time with millisecond precision: YYYY-MM-DD HH:MM:SS:XXX
+// Local date + time with millisecond precision: YYYY-MM-DD HH:MM:SS.XXX
 export function formatDateTimeMs(ms) {
   if (typeof ms !== 'number') return '';
   const d = new Date(ms);
   return `${formatDate(d)} ${formatTimeMs(ms)}`;
 }
 
-// Local time with millisecond precision: HH:MM:SS:XXX
+// Local time with millisecond precision: HH:MM:SS.XXX
 export function formatTimeMs(ms) {
   if (typeof ms !== 'number') return '';
   const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
 // Display strings derived from a stamp's epoch_ms (the single stored time)
