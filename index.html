@@ -37,25 +37,6 @@
     <!-- LOBBY -->
     <div id="screen-lobby" class="screen">
       <div class="wrap">
-        <input
-          id="room-name"
-          class="room-name-input"
-          maxlength="40"
-          placeholder="Room name (e.g. Sprint Heat 3)"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button id="btn-create" class="btn-create">Create Room</button>
-
-        <div class="lobby-live-rooms">
-          <div class="lobby-live-title">
-            <span class="live-dot"></span> Live rooms
-          </div>
-          <div id="room-list" class="room-list"></div>
-        </div>
-
-        <div class="lobby-divider">or join with code</div>
-
         <div class="lobby-section">
           <input
             id="join-code"
@@ -69,6 +50,25 @@
           />
           <button id="btn-join" class="btn-join">Join</button>
         </div>
+
+        <div class="lobby-live-rooms">
+          <div class="lobby-live-title">
+            <span class="live-dot"></span> Live rooms
+          </div>
+          <div id="room-list" class="room-list"></div>
+        </div>
+
+        <div class="lobby-divider">or create a new room</div>
+
+        <input
+          id="room-name"
+          class="room-name-input"
+          maxlength="40"
+          placeholder="Room name (e.g. Sprint Heat 3)"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="btn-create" class="btn-create">Create Room</button>
       </div>
     </div>
 

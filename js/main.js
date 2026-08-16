@@ -216,8 +216,13 @@ function renderRoomList(rooms) {
 // ── Room actions ───────────────────────────────────────────────────────────
 
 function createRoom() {
+  const name = $('room-name').value.trim();
+  if (!name) {
+    alert('Please give the room a name first.');
+    $('room-name').focus();
+    return;
+  }
   connectDb();
-  const name = $('room-name').value.trim() || 'Unnamed Room';
   const code = generateCode();
   db.ref(`rooms/${code}/meta`).get()
     .then(snap => {
