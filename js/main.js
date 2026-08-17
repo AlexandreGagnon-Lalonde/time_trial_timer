@@ -166,7 +166,9 @@ function subscribeToRoom(code) {
 // recorded stay visible everywhere no matter what it says.
 function applySplitsEnabled(enabled) {
   state.splitsEnabled = enabled;
-  document.querySelector('.split').classList.toggle('hidden', !enabled);
+  // Scoped to the button row: the hold overlay also carries a type class
+  // ('split') after a press, and a bare .split query would match it first.
+  document.querySelector('.buttons .split').classList.toggle('hidden', !enabled);
   $('menu-split').textContent = enabled ? 'Disable Split Timer' : 'Enable Split Timer';
 }
 
