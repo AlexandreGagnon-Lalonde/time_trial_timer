@@ -37,6 +37,42 @@ export function getFinishedAthletes(list) {
   return out;
 }
 
+// All SPLIT stamps in time order, each paired to its athlete's timing window
+// (earliest start → first finish at or after it). The operator label is the
+// checkpoint identity. elapsedMs is measured from the start and is null when
+// no start precedes the split; unmatched flags splits with no usable start or
+// ones recorded after the athlete's finish, for the same red-flag treatment
+// as an unmatched finish.
+export function getSplits(list) {
+  const windows = new Map();
+  list.forEach(s => {
+    const key = normAthlete(s.athlete);
+    if (!key || typeof s.epoch_ms !== 'number') return;
+    if (!windows.has(key)) windows.set(key, { starts: [], finishes: [] });
+    if (s.type === 'START') windows.get(key).starts.push(s.epoch_ms);
+    else if (s.type === 'FINISH') windows.get(key).finishes.push(s.epoch_ms);
+  });
+  const out = [];
+  list.forEach(s => {
+    if (s.type !== 'SPLIT' || typeof s.epoch_ms !== 'number') return;
+    const w = windows.get(normAthlete(s.athlete));
+    const startMs = w && w.starts.length ? Math.min(...w.starts) : null;
+    const after = startMs !== null ? w.finishes.filter(f => f >= startMs) : [];
+    const finishMs = after.length ? Math.min(...after) : null;
+    const hasStart = startMs !== null && s.epoch_ms >= startMs;
+    out.push({
+      _key: s._key,
+      athlete: (s.athlete || '').trim(),
+      checkpoint: (s.operator || '').trim(),
+      splitMs: s.epoch_ms,
+      elapsedMs: hasStart ? s.epoch_ms - startMs : null,
+      unmatched: !hasStart || (finishMs !== null && s.epoch_ms > finishMs),
+    });
+  });
+  out.sort((a, b) => a.splitMs - b.splitMs);
+  return out;
+}
+
 // Distinct athlete names seen, each tagged with whether they've started and
 // finished. Used for autocomplete suggestions and unmatched-finish flags.
 export function getAthleteIndex(list) {

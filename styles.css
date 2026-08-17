@@ -51,6 +51,8 @@
   --start-light: #d4ede5;
   --finish: #b94040;
   --finish-light: #f5dede;
+  --split: #3b628f;
+  --split-light: #dde7f2;
   --danger: #b94040;
   --shadow-sm:
     0 1px 3px rgba(26, 24, 23, 0.08), 0 1px 2px rgba(26, 24, 23, 0.06);
@@ -148,6 +150,11 @@ h1 {
 .hold-overlay.finish {
   background: var(--finish-light);
   color: var(--finish);
+}
+
+.hold-overlay.split {
+  background: var(--split-light);
+  color: var(--split);
 }
 
 .hold-label {
@@ -787,7 +794,8 @@ button.is-pressed {
 }
 
 .start,
-.finish {
+.finish,
+.split {
   /* none (not manipulation) so sliding a finger doesn't become a scroll/pan
      gesture that cancels the press before release */
   touch-action: none;
@@ -816,6 +824,18 @@ button.is-pressed {
 .finish:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+/* Room-level opt-in third button, full-width below the START/FINISH pair */
+.split {
+  grid-column: 1 / -1;
+  background: var(--split-light);
+  color: var(--split);
+  border: 1.5px solid #b3c6dd;
+}
+
+.split:hover {
+  background: #ccdaeb;
 }
 
 /* ── Active racers ─────────────────────────────────────────────────────── */
@@ -1142,6 +1162,12 @@ th {
 
 .lookup-warn {
   margin-top: 14px;
+}
+
+/* Split outside its athlete's start–finish window — same flag color as the
+   stamps table's unmatched rows */
+.lookup-detail .lookup-split-flagged {
+  color: var(--finish);
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────── */

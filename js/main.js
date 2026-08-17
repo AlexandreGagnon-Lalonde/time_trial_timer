@@ -4,7 +4,7 @@
 import { db, firebaseConfig } from './firebase-db.js';
 import { state } from './state.js';
 import { escapeHtml, formatStamp, formatDate, formatElapsed, stampTime, stampDate } from './format.js';
-import { normAthlete, getFinishedAthletes, getAthleteIndex } from './results.js';
+import { normAthlete, getFinishedAthletes, getAthleteIndex, getSplits } from './results.js';
 import { connectDb, disconnectDb, syncedNow } from './clock.js';
 import { enableWakeLock, disableWakeLock } from './wake-lock.js';
 import { downloadCSV } from './csv.js';
@@ -61,8 +61,8 @@ function showHold(type) {
   const o = $('hold-overlay');
   if (!o) return;
   holdCancelActive = false;
-  o.classList.remove('start', 'finish', 'in-cancel');
-  o.classList.add(type === 'START' ? 'start' : 'finish', 'showing');
+  o.classList.remove('start', 'finish', 'split', 'in-cancel');
+  o.classList.add(type === 'START' ? 'start' : type === 'SPLIT' ? 'split' : 'finish', 'showing');
   $('hold-type').textContent = type;
   const athlete = $('athlete').value.trim();
   $('hold-athlete').textContent = athlete ? '#' + athlete : '';
@@ -124,6 +124,7 @@ function goToTimer(code, name = '') {
   ensureRoomIndexed(code);
   updateBadge(name, code);
   $('deleted-banner').classList.add('hidden');
+  applySplitsEnabled(false); // until the room's meta listener says otherwise
   hideMenu();
   enableWakeLock();
   showScreen('screen-timer');
@@ -136,6 +137,7 @@ function detachFirebaseListeners() {
   if (!state.room) return;
   db.ref(`rooms/${state.room}/stamps`).off();
   db.ref(`rooms/${state.room}/meta/deleted`).off();
+  db.ref(`rooms/${state.room}/meta/splitsEnabled`).off();
 }
 
 function subscribeToRoom(code) {
@@ -154,6 +156,24 @@ function subscribeToRoom(code) {
   db.ref(`rooms/${code}/meta/deleted`).on('value', snap => {
     if (snap.val() === true) showDeletedBanner();
   });
+
+  db.ref(`rooms/${code}/meta/splitsEnabled`).on('value', snap => {
+    applySplitsEnabled(snap.val() === true);
+  });
+}
+
+// The flag only controls whether the SPLIT button renders — stamps already
+// recorded stay visible everywhere no matter what it says.
+function applySplitsEnabled(enabled) {
+  state.splitsEnabled = enabled;
+  document.querySelector('.split').classList.toggle('hidden', !enabled);
+  $('menu-split').textContent = enabled ? 'Disable Split Timer' : 'Enable Split Timer';
+}
+
+function toggleSplits() {
+  if (!state.room) return;
+  db.ref(`rooms/${state.room}/meta/splitsEnabled`).set(!state.splitsEnabled);
+  hideMenu();
 }
 
 // ── Room index (lobby list) ────────────────────────────────────────────────
@@ -349,9 +369,11 @@ function renderActiveRacers() {
   if (!el) return;
 
   // stamps are already sorted by epoch_ms ascending, so last write wins.
-  // Key by normalized name so "214 " and "214" are the same racer.
+  // Key by normalized name so "214 " and "214" are the same racer. Splits
+  // are ignored: a racer stays on course until a FINISH, period.
   const lastByKey = new Map();
   state.stamps.forEach(s => {
+    if (s.type !== 'START' && s.type !== 'FINISH') return;
     const key = normAthlete(s.athlete);
     if (!key) return;
     lastByKey.set(key, { display: (s.athlete || '').trim(), type: s.type });
@@ -383,16 +405,22 @@ function render() {
   // Athletes who have a start, for flagging finishes that can't be paired.
   const startedKeys = new Set();
   state.stamps.forEach(s => { if (s.type === 'START') startedKeys.add(normAthlete(s.athlete)); });
+  // Splits outside their athlete's start–finish window get the same flag.
+  const splitUnmatched = new Set();
+  getSplits(state.stamps).forEach(sp => { if (sp.unmatched) splitUnmatched.add(sp._key); });
   tbody.innerHTML = '';
   state.stamps.slice().reverse().forEach((r, i) => {
     const n = state.stamps.length - i;
-    const unmatched = r.type === 'FINISH' && !startedKeys.has(normAthlete(r.athlete));
+    const unmatched =
+      (r.type === 'FINISH' && !startedKeys.has(normAthlete(r.athlete))) ||
+      (r.type === 'SPLIT' && splitUnmatched.has(r._key));
+    const flagTitle = r.type === 'SPLIT' ? 'No matching start, or after the finish' : 'No matching start';
     const tr = document.createElement('tr');
     tr.className = 'row-clickable' + (unmatched ? ' row-unmatched' : '');
     tr.onclick = () => openEditSheet(r._key);
     tr.innerHTML = `
       <td>${n}${r.editedAt ? '<span class="edited-dot"></span>' : ''}</td>
-      <td>${escapeHtml(r.type)}${unmatched ? '<span class="unmatched-dot" title="No matching start"></span>' : ''}</td>
+      <td>${escapeHtml(r.type)}${unmatched ? `<span class="unmatched-dot" title="${flagTitle}"></span>` : ''}</td>
       <td>${stampTime(r.epoch_ms)}</td>
       <td>${stampDate(r.epoch_ms)}</td>
       <td>${escapeHtml(r.athlete)}</td>
@@ -489,10 +517,23 @@ function showLookupResult(athlete) {
   const warn = parts.length
     ? `<p class="lookup-warn">Multiple ${parts.join(' & ')} recorded — using the earliest start and the first finish after it.</p>`
     : '';
+  // Every split for this athlete, in time order, labelled by its checkpoint
+  // (the operator/station field). Elapsed is from the start; a split with no
+  // usable start falls back to its wall-clock time. Flagged splits keep the
+  // same red treatment as the stamps table.
+  const splitRows = getSplits(state.stamps)
+    .filter(sp => normAthlete(sp.athlete) === normAthlete(athlete))
+    .map(sp => {
+      const label = sp.checkpoint || 'Split';
+      const value = sp.elapsedMs !== null ? formatElapsed(sp.elapsedMs) : formatStamp(new Date(sp.splitMs));
+      return `<span class="lookup-split${sp.unmatched ? ' lookup-split-flagged' : ''}">${escapeHtml(label)}</span>` +
+             `<strong class="${sp.unmatched ? 'lookup-split-flagged' : ''}">${value}</strong>`;
+    }).join('');
   el.innerHTML = `
     <div class="lookup-elapsed">${formatElapsed(f.elapsedMs)}</div>
     <div class="lookup-detail">
       <span>Start</span><strong>${formatStamp(new Date(f.startMs))}</strong>
+      ${splitRows}
       <span>Finish</span><strong>${formatStamp(new Date(f.finishMs))}</strong>
     </div>
     ${warn}
@@ -675,6 +716,7 @@ function init() {
   $('menu-close').addEventListener('click', hideMenu);
   $('menu-lookup').addEventListener('click', openLookup);
   $('menu-csv').addEventListener('click', downloadCSV);
+  $('menu-split').addEventListener('click', toggleSplits);
   $('menu-rename').addEventListener('click', toggleRenameField);
   $('rename-save').addEventListener('click', saveRoomName);
   $('menu-leave').addEventListener('click', leaveRoom);
@@ -737,7 +779,7 @@ function init() {
   });
 
   // Stamp buttons: fire on release, primary pointer only, no context menu
-  [['start', 'START'], ['finish', 'FINISH']].forEach(([cls, type]) => {
+  [['start', 'START'], ['finish', 'FINISH'], ['split', 'SPLIT']].forEach(([cls, type]) => {
     const btn = document.querySelector(`.${cls}`);
     btn.addEventListener('pointerdown',  e => {
       if (!e.isPrimary || btn.disabled) return;
