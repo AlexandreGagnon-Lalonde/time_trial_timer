@@ -125,6 +125,7 @@ function goToTimer(code, name = '') {
   updateBadge(name, code);
   $('deleted-banner').classList.add('hidden');
   applySplitsEnabled(false); // until the room's meta listener says otherwise
+  applyResultsHidden(false);
   hideMenu();
   enableWakeLock();
   showScreen('screen-timer');
@@ -138,6 +139,7 @@ function detachFirebaseListeners() {
   db.ref(`rooms/${state.room}/stamps`).off();
   db.ref(`rooms/${state.room}/meta/deleted`).off();
   db.ref(`rooms/${state.room}/meta/splitsEnabled`).off();
+  db.ref(`rooms/${state.room}/meta/resultsHidden`).off();
 }
 
 function subscribeToRoom(code) {
@@ -160,6 +162,10 @@ function subscribeToRoom(code) {
   db.ref(`rooms/${code}/meta/splitsEnabled`).on('value', snap => {
     applySplitsEnabled(snap.val() === true);
   });
+
+  db.ref(`rooms/${code}/meta/resultsHidden`).on('value', snap => {
+    applyResultsHidden(snap.val() === true);
+  });
 }
 
 // The flag only controls whether the SPLIT button renders — stamps already
@@ -175,6 +181,25 @@ function applySplitsEnabled(enabled) {
 function toggleSplits() {
   if (!state.room) return;
   db.ref(`rooms/${state.room}/meta/splitsEnabled`).set(!state.splitsEnabled);
+  hideMenu();
+}
+
+// Hiding results locks the room from the outside: the lobby entry goes grey
+// and unclickable, and the spectate screen refuses to show its times. People
+// who have the 4-character code can still join as operators.
+function applyResultsHidden(hidden) {
+  state.resultsHidden = hidden;
+  $('menu-hide').textContent = hidden ? 'Show Results' : 'Hide Results';
+}
+
+function toggleResultsHidden() {
+  if (!state.room) return;
+  const hidden = !state.resultsHidden;
+  // Atomic write so the room and the lobby index can't diverge
+  db.ref().update({
+    [`rooms/${state.room}/meta/resultsHidden`]: hidden,
+    [`roomIndex/${state.room}/resultsHidden`]: hidden,
+  });
   hideMenu();
 }
 
@@ -195,13 +220,19 @@ function ensureRoomIndexed(code) {
 // listener, so people browsing the lobby never hold a Firebase connection.
 let lobbyPollTimer = null;
 
+const IDLE_CUTOFF_MS = 3 * 24 * 60 * 60 * 1000;
+
 function fetchRoomList() {
   if (document.hidden) return;
   fetch(`${firebaseConfig.databaseURL}/roomIndex.json`)
     .then(r => r.json())
     .then(data => {
+      const idleSince = Date.now() - IDLE_CUTOFF_MS;
       const rooms = Object.entries(data || {})
         .filter(([, r]) => r && !r.deleted)
+        // Idle rooms (no stamp and no creation within the cutoff) drop off the
+        // lobby; the data stays and joining by code still works.
+        .filter(([, r]) => Math.max(r.createdAt || 0, r.lastActivityAt || 0) >= idleSince)
         .map(([code, r]) => ({ code, ...r }));
       rooms.sort((a, b) => b.createdAt - a.createdAt);
       renderRoomList(rooms);
@@ -227,7 +258,12 @@ function renderRoomList(rooms) {
     el.innerHTML = '<p class="no-rooms">No active rooms yet.</p>';
     return;
   }
-  el.innerHTML = rooms.map(r => `
+  el.innerHTML = rooms.map(r => r.resultsHidden ? `
+    <button type="button" class="room-list-item room-list-locked" disabled>
+      <span class="room-list-name">${escapeHtml(r.name)}</span>
+      <span class="room-list-view">Hidden</span>
+    </button>
+  ` : `
     <button type="button" class="room-list-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}">
       <span class="room-list-name">${escapeHtml(r.name)}</span>
       <span class="room-list-view">Results ›</span>
@@ -357,8 +393,13 @@ function logStamp(type) {
     operator: $('operator').value.trim(),
     note: $('note').value.trim()
   };
-  const ref = db.ref(`rooms/${state.room}/stamps`).push();
-  ref.set(rec);
+  const key = db.ref(`rooms/${state.room}/stamps`).push().key;
+  // One atomic write: the stamp plus the lobby index's activity marker, which
+  // keeps the room from being filtered out as idle while it's still in use.
+  db.ref().update({
+    [`rooms/${state.room}/stamps/${key}`]: rec,
+    [`roomIndex/${state.room}/lastActivityAt`]: rec.epoch_ms,
+  });
   $('last').innerHTML =
     `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
   if (navigator.vibrate) navigator.vibrate(35);
@@ -595,6 +636,11 @@ function renderSpectate(data, code) {
     return;
   }
   updateSpectateBadge(data.meta.name || 'Live results');
+  // Also covers spectators already on this screen when the room flips hidden.
+  if (data.meta.resultsHidden) {
+    content.innerHTML = '<p class="spectate-empty">Results for this room are hidden.</p>';
+    return;
+  }
 
   const list = Object.values(data.stamps || {})
     .filter(s => s && typeof s.epoch_ms === 'number')
@@ -684,6 +730,7 @@ function saveEdit() {
     editedAt: syncedNow(),
   };
   db.ref(`rooms/${state.room}/stamps/${state.editingKey}`).update(updates);
+  db.ref(`roomIndex/${state.room}/lastActivityAt`).set(updates.editedAt);
   closeEditSheet();
 }
 
@@ -719,6 +766,7 @@ function init() {
   $('menu-lookup').addEventListener('click', openLookup);
   $('menu-csv').addEventListener('click', downloadCSV);
   $('menu-split').addEventListener('click', toggleSplits);
+  $('menu-hide').addEventListener('click', toggleResultsHidden);
   $('menu-rename').addEventListener('click', toggleRenameField);
   $('rename-save').addEventListener('click', saveRoomName);
   $('menu-leave').addEventListener('click', leaveRoom);

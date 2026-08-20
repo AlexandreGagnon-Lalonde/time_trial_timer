@@ -308,6 +308,15 @@ h1 {
   white-space: nowrap;
 }
 
+.room-list-locked {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.room-list-locked .room-list-view {
+  color: var(--text-muted);
+}
+
 .no-rooms {
   font-size: 13px;
   color: var(--text-muted);

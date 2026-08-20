@@ -11,6 +11,7 @@
           "createdAt": { ".validate": "newData.isNumber()" },
           "deleted": { ".validate": "newData.isBoolean()" },
           "splitsEnabled": { ".validate": "newData.isBoolean()" },
+          "resultsHidden": { ".validate": "newData.isBoolean()" },
           "$other": { ".validate": false }
         },
         "stamps": {
@@ -38,6 +39,8 @@
         "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
         "createdAt": { ".validate": "newData.isNumber()" },
         "deleted": { ".validate": "newData.isBoolean()" },
+        "resultsHidden": { ".validate": "newData.isBoolean()" },
+        "lastActivityAt": { ".validate": "newData.isNumber()" },
         "$other": { ".validate": false }
       }
     }
