@@ -14,6 +14,10 @@
           "resultsHidden": { ".validate": "newData.isBoolean()" },
           "$other": { ".validate": false }
         },
+        "roster": {
+          ".write": true,
+          "$key": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" }
+        },
         "stamps": {
           "$stamp": {
             ".write": "newData.exists()",

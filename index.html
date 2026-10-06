@@ -100,6 +100,8 @@
                 <button id="menu-close" class="menu-close-btn">✕</button>
               </div>
               <button id="menu-lookup" class="menu-item">Athlete Lookup</button>
+              <button id="menu-roster" class="menu-item">Import Athletes</button>
+              <button id="menu-clear-roster" class="menu-item danger hidden">Clear Athlete List</button>
               <button id="menu-csv" class="menu-item">Download CSV</button>
               <button id="menu-split" class="menu-item">Enable Split Timer</button>
               <button id="menu-hide" class="menu-item">Hide Results</button>
@@ -176,7 +178,10 @@
         <button id="edit-close" class="edit-sheet-close">✕</button>
       </div>
       <label for="edit-athlete">Athlete</label>
-      <input id="edit-athlete" inputmode="text" />
+      <div class="athlete-field">
+        <input id="edit-athlete" inputmode="text" autocomplete="off" />
+        <div id="edit-athlete-suggest" class="athlete-suggest athlete-suggest--inline hidden"></div>
+      </div>
       <label for="edit-operator">Operator</label>
       <input id="edit-operator" />
       <label for="edit-note">Note</label>
@@ -204,6 +209,34 @@
       />
       <div id="lookup-options" class="lookup-options"></div>
       <div id="lookup-result" class="lookup-result"></div>
+    </div>
+
+    <!-- ROSTER IMPORT SHEET -->
+    <div id="roster-overlay" class="edit-overlay hidden"></div>
+    <div id="roster-sheet" class="edit-sheet hidden">
+      <div class="edit-sheet-handle"></div>
+      <div class="edit-sheet-header">
+        <span class="edit-sheet-title">Import Athletes</span>
+        <button id="roster-close" class="edit-sheet-close">✕</button>
+      </div>
+      <textarea
+        id="roster-text"
+        class="roster-text"
+        rows="6"
+        placeholder="Paste names, one per line or separated by commas"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+      ></textarea>
+      <div class="roster-tools">
+        <label for="roster-file" class="roster-file-btn">Choose file…</label>
+        <input id="roster-file" type="file" accept=".csv,.txt,text/csv,text/plain" class="roster-file-input" />
+        <span id="roster-preview" class="roster-preview"></span>
+      </div>
+      <div class="edit-sheet-actions">
+        <button id="roster-cancel" class="edit-cancel">Cancel</button>
+        <button id="roster-import" class="edit-save" disabled>Import</button>
+      </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>

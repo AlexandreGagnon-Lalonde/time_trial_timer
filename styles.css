@@ -748,6 +748,10 @@ input:focus {
 }
 
 .suggest-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   text-align: left;
   padding: 11px 14px;
@@ -768,6 +772,43 @@ input:focus {
 .suggest-item:active {
   background: var(--surface-alt);
   transform: none;
+}
+
+/* Race status next to a suggested name */
+.suggest-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+.suggest-badge.oncourse {
+  background: var(--start-light);
+  color: var(--start);
+}
+
+.suggest-badge.finished {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+}
+
+/* "+ Add … to list" row for a name missing from the roster */
+.suggest-add {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+/* Inside a bottom sheet an absolute dropdown would open off-screen, so the
+   edit sheet's copy sits in the flow below its input and scrolls itself. */
+.athlete-suggest--inline {
+  position: static;
+  margin-top: 4px;
+  max-height: 30vh;
 }
 
 /* ── Stamp buttons ─────────────────────────────────────────────────────── */
@@ -1089,6 +1130,77 @@ th {
 
 .edit-save:hover {
   background: var(--accent-hover);
+}
+
+/* ── Roster import sheet ───────────────────────────────────────────────── */
+.roster-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 120px;
+  margin-top: 8px;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+
+.roster-text:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.roster-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.roster-file-input {
+  display: none;
+}
+
+.roster-file-btn {
+  display: inline-block;
+  margin: 0;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  background: var(--surface-alt);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.roster-file-btn:active {
+  background: var(--border);
+}
+
+.roster-preview {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.edit-save:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.edit-save:disabled:hover {
+  background: var(--accent);
 }
 
 /* ── Athlete lookup ────────────────────────────────────────────────────── */

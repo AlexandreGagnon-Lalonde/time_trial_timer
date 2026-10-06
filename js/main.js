@@ -8,6 +8,7 @@ import { normAthlete, getFinishedAthletes, getAthleteIndex, getSplits } from './
 import { connectDb, disconnectDb, syncedNow } from './clock.js';
 import { enableWakeLock, disableWakeLock } from './wake-lock.js';
 import { downloadCSV } from './csv.js';
+import { parseNames, rosterKey, matchRoster } from './roster.js';
 
 const ROOM_KEY = 'ttt_room_code';
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes O/0 and I/1 to avoid confusion
@@ -140,10 +141,13 @@ function detachFirebaseListeners() {
   db.ref(`rooms/${state.room}/meta/deleted`).off();
   db.ref(`rooms/${state.room}/meta/splitsEnabled`).off();
   db.ref(`rooms/${state.room}/meta/resultsHidden`).off();
+  db.ref(`rooms/${state.room}/roster`).off();
 }
 
 function subscribeToRoom(code) {
   state.stamps = [];
+  state.roster = [];
+  applyRoster();
 
   db.ref(`rooms/${code}/stamps`).on('value', snap => {
     const stamps = [];
@@ -152,7 +156,7 @@ function subscribeToRoom(code) {
     state.stamps = stamps;
     render();
     renderActiveRacers();
-    updateAthleteSuggestions();
+    refreshSuggestions();
   });
 
   db.ref(`rooms/${code}/meta/deleted`).on('value', snap => {
@@ -165,6 +169,13 @@ function subscribeToRoom(code) {
 
   db.ref(`rooms/${code}/meta/resultsHidden`).on('value', snap => {
     applyResultsHidden(snap.val() === true);
+  });
+
+  db.ref(`rooms/${code}/roster`).on('value', snap => {
+    const names = Object.values(snap.val() || {}).filter(v => typeof v === 'string' && v.trim());
+    names.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    state.roster = names;
+    applyRoster();
   });
 }
 
@@ -474,30 +485,170 @@ function render() {
 }
 
 // ── Athlete suggestions ────────────────────────────────────────────────────
-// Custom suggestion dropdown for the athlete field (a native <datalist> stacks
-// with the browser's own autofill popup and behaves inconsistently). Shows only
-// athletes who've started but not finished, filtered to what's typed; hidden
-// when the field is blank, unfocused, has no match, or exactly matches a name.
-function hideAthleteSuggest() {
-  const box = $('athlete-suggest');
+// Custom suggestion dropdown shared by the timer's athlete field and the edit
+// sheet's (a native <datalist> stacks with the browser's own autofill popup and
+// behaves inconsistently). With a roster loaded it lists roster names whose
+// start matches what's typed (the whole roster when the field is blank), each
+// tagged with race status. Athletes on course who were typed ad hoc, outside
+// the roster, are still offered by substring so a finish station never loses
+// them. Typing a name that isn't in the roster adds a row to append it.
+const SUGGEST_FIELDS = [['athlete', 'athlete-suggest'], ['edit-athlete', 'edit-athlete-suggest']];
+
+function hideSuggest(box) {
   if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
 }
 
-function updateAthleteSuggestions() {
-  const box = $('athlete-suggest');
-  const input = $('athlete');
+function refreshSuggestions() {
+  SUGGEST_FIELDS.forEach(([inputId, boxId]) => renderSuggestions($(inputId), $(boxId)));
+}
+
+function suggestBadge(entry) {
+  if (!entry) return '';
+  if (entry.finished) return '<span class="suggest-badge finished">finished</span>';
+  if (entry.started) return '<span class="suggest-badge oncourse">on course</span>';
+  return '';
+}
+
+function renderSuggestions(input, box) {
   if (!box || !input) return;
-  if (document.activeElement !== input) return hideAthleteSuggest();
-  const q = normAthlete(input.value);
-  if (!q) return hideAthleteSuggest();
-  const matches = [...getAthleteIndex(state.stamps).values()]
-    .filter(e => e.started && !e.finished && normAthlete(e.display).includes(q))
-    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }));
-  if (!matches.length || matches.some(e => normAthlete(e.display) === q)) return hideAthleteSuggest();
-  box.innerHTML = matches
-    .map(e => `<button type="button" class="suggest-item" data-name="${escapeHtml(e.display)}">${escapeHtml(e.display)}</button>`)
+  if (document.activeElement !== input) return hideSuggest(box);
+  const typed = input.value.trim();
+  const q = normAthlete(typed);
+  if (!q && !state.roster.length) return hideSuggest(box);
+
+  const index = getAthleteIndex(state.stamps);
+  const rosterKeys = new Set(state.roster.map(normAthlete));
+  const items = matchRoster(state.roster, q)
+    .map(name => ({ display: name, entry: index.get(normAthlete(name)) }));
+  [...index.values()]
+    .filter(e => e.started && !e.finished && !rosterKeys.has(e.key) && e.key.includes(q))
+    .sort((a, b) => a.display.localeCompare(b.display, undefined, { numeric: true }))
+    .forEach(e => items.push({ display: e.display, entry: e }));
+
+  // Only offer to add once a roster exists, so rooms that never import one
+  // keep the plain on-course dropdown they had before.
+  const canAdd = !!q && state.roster.length > 0 && !rosterKeys.has(q);
+  const exact = items.some(it => normAthlete(it.display) === q);
+  // Nothing to offer, or the field already holds the one name we'd show.
+  if (!items.length && !canAdd) return hideSuggest(box);
+  if (exact && items.length === 1 && !canAdd) return hideSuggest(box);
+
+  let html = items
+    .map(it => `<button type="button" class="suggest-item" data-name="${escapeHtml(it.display)}">` +
+               `<span>${escapeHtml(it.display)}</span>${suggestBadge(it.entry)}</button>`)
     .join('');
+  if (canAdd) {
+    html += `<button type="button" class="suggest-item suggest-add" data-name="${escapeHtml(typed)}">` +
+            `+ Add "${escapeHtml(typed)}" to list</button>`;
+  }
+  box.innerHTML = html;
   box.classList.remove('hidden');
+}
+
+function bindSuggestField(inputId, boxId) {
+  const input = $(inputId);
+  const box = $(boxId);
+  if (!input || !box) return;
+  input.addEventListener('input', () => renderSuggestions(input, box));
+  input.addEventListener('focus', () => renderSuggestions(input, box));
+  input.addEventListener('blur', () => setTimeout(() => hideSuggest(box), 100));
+  box.addEventListener('pointerdown', e => {
+    const item = e.target.closest('.suggest-item');
+    if (!item) return;
+    e.preventDefault(); // keep focus; avoid a blur race hiding the list first
+    const name = item.dataset.name;
+    if (item.classList.contains('suggest-add')) addToRoster(name);
+    input.value = name;
+    hideSuggest(box);
+  });
+}
+
+// ── Roster (imported athlete list) ─────────────────────────────────────────
+// Names live under rooms/CODE/roster keyed by their normalized form, so every
+// station in the room sees the same list and re-importing the same sheet is a
+// no-op. Stamping never touches the roster: only Import and the Add row do.
+
+function applyRoster() {
+  const n = state.roster.length;
+  $('menu-roster').textContent = n ? `Import Athletes (${n})` : 'Import Athletes';
+  $('menu-clear-roster').classList.toggle('hidden', !n);
+  refreshSuggestions();
+  updateRosterPreview();
+}
+
+function addToRoster(name) {
+  const display = (name || '').trim();
+  if (!state.room || !display) return;
+  db.ref(`rooms/${state.room}/roster/${rosterKey(display)}`).set(display);
+}
+
+function openRosterSheet() {
+  hideMenu();
+  $('roster-text').value = '';
+  $('roster-file').value = '';
+  updateRosterPreview();
+  $('roster-overlay').classList.remove('hidden');
+  $('roster-sheet').classList.remove('hidden');
+  bindKeyboardTracking();
+}
+
+function closeRosterSheet() {
+  $('roster-overlay').classList.add('hidden');
+  $('roster-sheet').classList.add('hidden');
+  unbindKeyboardTracking();
+}
+
+// Parsed names from the textarea, split into all of them and the ones the
+// room doesn't have yet.
+function pendingRosterNames() {
+  const names = parseNames($('roster-text').value);
+  const existing = new Set(state.roster.map(normAthlete));
+  return { names, fresh: names.filter(n => !existing.has(normAthlete(n))) };
+}
+
+function updateRosterPreview() {
+  const sheet = $('roster-sheet');
+  if (!sheet || sheet.classList.contains('hidden')) return;
+  const { names, fresh } = pendingRosterNames();
+  const el = $('roster-preview');
+  if (!names.length) {
+    el.textContent = $('roster-text').value.trim() ? 'No names found' : '';
+  } else {
+    const dup = names.length - fresh.length;
+    el.textContent = `${names.length} name${names.length === 1 ? '' : 's'}` +
+      (dup ? ` · ${dup} already in list` : '');
+  }
+  $('roster-import').disabled = !fresh.length;
+}
+
+function loadRosterFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    $('roster-text').value = String(reader.result || '');
+    updateRosterPreview();
+  };
+  reader.readAsText(file);
+}
+
+function importRoster() {
+  if (!state.room) return;
+  const { fresh } = pendingRosterNames();
+  if (!fresh.length) return;
+  // One multi-path write so the list lands atomically on every station.
+  const updates = {};
+  fresh.forEach(n => { updates[`rooms/${state.room}/roster/${rosterKey(n)}`] = n; });
+  db.ref().update(updates);
+  closeRosterSheet();
+}
+
+function clearRoster() {
+  hideMenu();
+  if (!state.room || !state.roster.length) return;
+  const n = state.roster.length;
+  if (!confirm(`Remove all ${n} name${n === 1 ? '' : 's'} from this room's athlete list?`)) return;
+  db.ref(`rooms/${state.room}/roster`).set(null);
 }
 
 // ── Athlete lookup ─────────────────────────────────────────────────────────
@@ -691,6 +842,7 @@ function openEditSheet(key) {
 
 function closeEditSheet() {
   state.editingKey = null;
+  hideSuggest($('edit-athlete-suggest'));
   $('edit-overlay').classList.add('hidden');
   $('edit-sheet').classList.add('hidden');
   unbindKeyboardTracking();
@@ -764,6 +916,8 @@ function init() {
   $('menu-btn').addEventListener('click', toggleMenu);
   $('menu-close').addEventListener('click', hideMenu);
   $('menu-lookup').addEventListener('click', openLookup);
+  $('menu-roster').addEventListener('click', openRosterSheet);
+  $('menu-clear-roster').addEventListener('click', clearRoster);
   $('menu-csv').addEventListener('click', downloadCSV);
   $('menu-split').addEventListener('click', toggleSplits);
   $('menu-hide').addEventListener('click', toggleResultsHidden);
@@ -781,6 +935,14 @@ function init() {
   $('edit-close').addEventListener('click', closeEditSheet);
   $('edit-cancel').addEventListener('click', closeEditSheet);
   $('edit-save').addEventListener('click', saveEdit);
+
+  // Roster import sheet
+  $('roster-overlay').addEventListener('click', closeRosterSheet);
+  $('roster-close').addEventListener('click', closeRosterSheet);
+  $('roster-cancel').addEventListener('click', closeRosterSheet);
+  $('roster-import').addEventListener('click', importRoster);
+  $('roster-text').addEventListener('input', updateRosterPreview);
+  $('roster-file').addEventListener('change', loadRosterFile);
 
   // Lookup sheet
   $('lookup-overlay').addEventListener('click', closeLookup);
@@ -810,17 +972,8 @@ function init() {
     if (e.key === 'Enter') saveRoomName();
   });
 
-  const athleteInput = $('athlete');
-  athleteInput.addEventListener('input', updateAthleteSuggestions);
-  athleteInput.addEventListener('focus', updateAthleteSuggestions);
-  athleteInput.addEventListener('blur', () => setTimeout(hideAthleteSuggest, 100));
-  $('athlete-suggest').addEventListener('pointerdown', e => {
-    const item = e.target.closest('.suggest-item');
-    if (!item) return;
-    e.preventDefault(); // keep focus; avoid a blur race hiding the list first
-    athleteInput.value = item.dataset.name;
-    hideAthleteSuggest();
-  });
+  // Athlete suggestion dropdowns (timer field and edit sheet field)
+  SUGGEST_FIELDS.forEach(([inputId, boxId]) => bindSuggestField(inputId, boxId));
 
   // Lookup: pick a filtered athlete (delegated so it survives re-renders)
   $('lookup-options').addEventListener('click', e => {
