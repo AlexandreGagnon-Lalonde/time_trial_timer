@@ -11,7 +11,16 @@ import { downloadCSV } from './csv.js';
 import { parseNames, rosterKey, matchRoster } from './roster.js';
 
 const ROOM_KEY = 'ttt_room_code';
+const TEAM_KEY = 'ttt_team_code';
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes O/0 and I/1 to avoid confusion
+
+// Code lengths. Open rooms keep 4 characters because people type them. The
+// database rules make knowing a code the only barrier to reading a team, so
+// team codes (typed once, then remembered) are 6, and rooms inside a team,
+// reached by tapping rather than typing, are 8: too many to guess.
+const ROOM_CODE_LEN = 4;
+const TEAM_CODE_LEN = 6;
+const TEAM_ROOM_CODE_LEN = 8;
 
 const $ = id => document.getElementById(id);
 
@@ -27,10 +36,16 @@ function isInAppBrowser() {
 
 // ── Utility ────────────────────────────────────────────────────────────────
 
-function generateCode() {
+function generateCode(len = ROOM_CODE_LEN) {
   let code = '';
-  for (let i = 0; i < 4; i++) code += CHARS[Math.floor(Math.random() * CHARS.length)];
+  for (let i = 0; i < len; i++) code += CHARS[Math.floor(Math.random() * CHARS.length)];
   return code;
+}
+
+// Where a room's lobby-facing summary lives: open rooms are listed in the
+// public index, team rooms only inside their team.
+function indexPath(code, team) {
+  return team ? `teams/${team}/rooms/${code}` : `roomIndex/${code}`;
 }
 
 // ── Clock display ──────────────────────────────────────────────────────────
@@ -98,7 +113,11 @@ function showScreen(id) {
 
 function goToLobby() {
   detachFirebaseListeners();
+  stopTeamPolling();
   state.room = null;
+  state.roomTeam = null;
+  state.team = null;
+  state.teamName = '';
   state.stamps = [];
   hideMenu();
   disableWakeLock();
@@ -109,28 +128,47 @@ function goToLobby() {
   showScreen('screen-lobby');
 }
 
-function updateBadge(name, code) {
-  const badge = $('room-badge');
+function updateBadge(name, code, badgeId = 'room-badge') {
+  const badge = $(badgeId);
   badge.innerHTML = name
     ? `${escapeHtml(name)} <span class="badge-code">${escapeHtml(code)}</span>`
     : escapeHtml(code);
 }
 
-function goToTimer(code, name = '') {
+// A team room's badge shows the team instead of the 8-character code, which
+// nobody needs to read off a screen.
+function updateRoomBadge() {
+  if (state.roomTeam) updateBadge(state.roomName || state.room, state.teamName || 'Team');
+  else updateBadge(state.roomName, state.room);
+}
+
+function goToTimer(code, name = '', team = null) {
   connectDb();
   stopLobbyPolling();
+  stopTeamPolling();
   state.room = code;
   state.roomName = name;
+  state.roomTeam = team;
   localStorage.setItem(ROOM_KEY, code);
-  ensureRoomIndexed(code);
-  updateBadge(name, code);
+  if (!team) ensureRoomIndexed(code);
+  updateRoomBadge();
   $('deleted-banner').classList.add('hidden');
   applySplitsEnabled(false); // until the room's meta listener says otherwise
   applyResultsHidden(false);
+  // Team rooms are private already; hiding results only means something for
+  // rooms listed in the public lobby.
+  $('menu-hide').classList.toggle('hidden', !!team);
   hideMenu();
   enableWakeLock();
   showScreen('screen-timer');
   subscribeToRoom(code);
+}
+
+// Leaving a room returns to wherever it was entered from: a team's room list
+// or the public lobby.
+function exitRoom() {
+  if (state.roomTeam) goToTeam(state.roomTeam, state.team === state.roomTeam ? state.teamName : '');
+  else goToLobby();
 }
 
 // ── Firebase listeners ─────────────────────────────────────────────────────
@@ -308,7 +346,11 @@ function createRoom() {
 
 function joinRoomFromInput() {
   const raw = $('join-code').value.trim().toUpperCase();
-  if (raw.length !== 4) { alert('Please enter a 4-character room code.'); return; }
+  // 4 for open rooms, 8 for a team room whose code a teammate passed along
+  if (raw.length !== ROOM_CODE_LEN && raw.length !== TEAM_ROOM_CODE_LEN) {
+    alert(`Please enter a ${ROOM_CODE_LEN}-character room code.`);
+    return;
+  }
   connectDb();
 
   db.ref(`rooms/${raw}/meta`).get()
@@ -320,7 +362,15 @@ function joinRoomFromInput() {
         return;
       }
       if (snap.val()?.deleted) { alert(`Room "${raw}" has been deleted.`); return; }
-      goToTimer(raw, snap.val()?.name || '');
+      const { name = '', team = null } = snap.val() || {};
+      if (!team) { goToTimer(raw, name); return; }
+      // A team room joined by code: pick up the team's name for the badge,
+      // and adopt the team so leaving the room lands on its room list.
+      return db.ref(`teams/${team}/meta/name`).get().then(nameSnap => {
+        state.team = team;
+        state.teamName = nameSnap.val() || '';
+        goToTimer(raw, name, team);
+      });
     })
     .catch(() => {
       // Network error — allow re-joining a previously saved room
@@ -331,13 +381,16 @@ function joinRoomFromInput() {
 
 // ── Menu ───────────────────────────────────────────────────────────────────
 
-function toggleMenu() {
-  document.querySelector('.menu-wrapper').classList.toggle('is-open');
+// The timer and team screens each have a menu; only one screen is visible at
+// a time, so closing every menu is always safe.
+function toggleMenu(e) {
+  e.currentTarget.closest('.menu-wrapper').classList.toggle('is-open');
 }
 
 function hideMenu() {
-  document.querySelector('.menu-wrapper').classList.remove('is-open');
+  document.querySelectorAll('.menu-wrapper').forEach(w => w.classList.remove('is-open'));
   $('rename-section').classList.add('hidden');
+  $('team-rename-section').classList.add('hidden');
 }
 
 function toggleRenameField() {
@@ -357,16 +410,16 @@ function saveRoomName() {
   state.roomName = name;
   db.ref().update({
     [`rooms/${state.room}/meta/name`]: name,
-    [`roomIndex/${state.room}/name`]: name,
+    [`${indexPath(state.room, state.roomTeam)}/name`]: name,
   });
-  updateBadge(name, state.room);
+  updateRoomBadge();
   hideMenu();
 }
 
 function leaveRoom() {
   hideMenu();
   localStorage.removeItem(ROOM_KEY);
-  goToLobby();
+  exitRoom();
 }
 
 function deleteRoom() {
@@ -378,12 +431,190 @@ function deleteRoom() {
   // the data, so an accidental delete never destroys recorded times.
   db.ref().update({
     [`rooms/${code}/meta/deleted`]: true,
-    [`roomIndex/${code}/deleted`]: true,
+    [`${indexPath(code, state.roomTeam)}/deleted`]: true,
   }).catch(err => alert('Could not delete room: ' + err.message));
 
   localStorage.removeItem(ROOM_KEY);
   showDeletedBanner();
-  setTimeout(goToLobby, 6000);
+  setTimeout(exitRoom, 6000);
+}
+
+// ── Teams ──────────────────────────────────────────────────────────────────
+// A team is a private group of rooms. The database rules only let a client
+// read `teams/<code>` when it asks for that exact code, and team rooms never
+// enter the public roomIndex, so knowing the team code is what grants access.
+// The team screen polls over HTTPS like the lobby, holding no live connection.
+
+let teamPollTimer = null;
+
+function goToTeam(code, name = '') {
+  detachFirebaseListeners();
+  state.room = null;
+  state.roomTeam = null;
+  state.stamps = [];
+  state.team = code;
+  state.teamName = name;
+  localStorage.setItem(TEAM_KEY, code);
+  hideMenu();
+  disableWakeLock();
+  disconnectDb();
+  stopLobbyPolling();
+  updateBadge(name, code, 'team-badge');
+  $('team-room-name').value = '';
+  startTeamPolling();
+  showScreen('screen-team');
+}
+
+function createTeam() {
+  const name = $('team-name').value.trim();
+  if (!name) {
+    alert('Please give the team a name first.');
+    $('team-name').focus();
+    return;
+  }
+  connectDb();
+  const code = generateCode(TEAM_CODE_LEN);
+  db.ref(`teams/${code}/meta`).get()
+    .then(snap => {
+      if (snap.exists()) { createTeam(); return; } // code already taken — roll a new one
+      return db.ref(`teams/${code}/meta`)
+        .set({ name, createdAt: syncedNow(), deleted: false })
+        .then(() => goToTeam(code, name));
+    })
+    .catch(err => alert('Could not create team: ' + err.message));
+}
+
+function enterTeamFromInput() {
+  const raw = $('team-code').value.trim().toUpperCase();
+  if (raw.length !== TEAM_CODE_LEN) { alert(`Please enter a ${TEAM_CODE_LEN}-character team code.`); return; }
+  fetch(`${firebaseConfig.databaseURL}/teams/${raw}/meta.json`)
+    .then(r => r.json())
+    .then(meta => {
+      if (!meta) { alert(`Team "${raw}" not found.`); return; }
+      if (meta.deleted) { alert(`Team "${raw}" has been deleted.`); return; }
+      goToTeam(raw, meta.name || '');
+    })
+    .catch(() => alert('Cannot connect. Check your connection and try again.'));
+}
+
+function fetchTeam() {
+  if (!state.team || document.hidden) return;
+  const code = state.team;
+  fetch(`${firebaseConfig.databaseURL}/teams/${code}.json`)
+    .then(r => r.json())
+    .then(data => {
+      if (code !== state.team) return; // left the screen mid-fetch
+      if (!data || !data.meta || data.meta.deleted) {
+        alert('This team no longer exists.');
+        leaveTeam();
+        return;
+      }
+      if (data.meta.name && data.meta.name !== state.teamName) {
+        state.teamName = data.meta.name;
+        updateBadge(state.teamName, code, 'team-badge');
+      }
+      // Every room the team has ever used stays listed (no idle cutoff), most
+      // recently active first, so old results stay a tap away.
+      const rooms = Object.entries(data.rooms || {})
+        .filter(([, r]) => r && !r.deleted)
+        .map(([roomCode, r]) => ({ code: roomCode, ...r, activeAt: Math.max(r.createdAt || 0, r.lastActivityAt || 0) }));
+      rooms.sort((a, b) => b.activeAt - a.activeAt);
+      renderTeamRoomList(rooms);
+    })
+    .catch(() => {}); // keep showing the last list if a poll fails
+}
+
+function startTeamPolling() {
+  stopTeamPolling();
+  fetchTeam();
+  teamPollTimer = setInterval(fetchTeam, 20000);
+}
+
+function stopTeamPolling() {
+  clearInterval(teamPollTimer);
+  teamPollTimer = null;
+}
+
+// Tapping a room enters it as an operator; the Results link watches it.
+function renderTeamRoomList(rooms) {
+  const el = $('team-room-list');
+  if (!rooms.length) {
+    el.innerHTML = '<p class="no-rooms">No rooms yet. Create one below.</p>';
+    return;
+  }
+  el.innerHTML = rooms.map(r => `
+    <div class="room-list-item team-room-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}">
+      <span class="room-list-name">${escapeHtml(r.name)}</span>
+      <button type="button" class="room-list-view team-room-results">Results ›</button>
+    </div>
+  `).join('');
+}
+
+function createTeamRoom() {
+  const name = $('team-room-name').value.trim();
+  if (!name) {
+    alert('Please give the room a name first.');
+    $('team-room-name').focus();
+    return;
+  }
+  const team = state.team;
+  connectDb();
+  const code = generateCode(TEAM_ROOM_CODE_LEN);
+  db.ref(`rooms/${code}/meta`).get()
+    .then(snap => {
+      if (snap.exists()) { createTeamRoom(); return; } // code already taken — roll a new one
+      const createdAt = syncedNow();
+      // One atomic write: the room itself (tagged with its team) and the
+      // team's own index entry, so neither can exist without the other.
+      return db.ref().update({
+        [`rooms/${code}/meta`]: { name, createdAt, deleted: false, team },
+        [`teams/${team}/rooms/${code}`]: { name, createdAt, deleted: false },
+      }).then(() => goToTimer(code, name, team));
+    })
+    .catch(err => alert('Could not create room: ' + err.message));
+}
+
+function toggleTeamRenameField() {
+  const section = $('team-rename-section');
+  const isHidden = section.classList.toggle('hidden');
+  if (!isHidden) {
+    const input = $('team-rename-input');
+    input.value = state.teamName;
+    input.focus();
+    input.select();
+  }
+}
+
+function saveTeamName() {
+  const name = $('team-rename-input').value.trim();
+  if (!name || !state.team) return;
+  state.teamName = name;
+  connectDb();
+  db.ref(`teams/${state.team}/meta/name`).set(name)
+    // Drop the connection again unless a room was entered in the meantime
+    .then(() => { if (!state.room) disconnectDb(); })
+    .catch(err => alert('Could not rename team: ' + err.message));
+  updateBadge(name, state.team, 'team-badge');
+  hideMenu();
+}
+
+// Forget the team on this device and go back to the lobby.
+function leaveTeam() {
+  hideMenu();
+  localStorage.removeItem(TEAM_KEY);
+  goToLobby();
+}
+
+function deleteTeam() {
+  hideMenu();
+  const code = state.team;
+  if (!confirm(`Delete team "${state.teamName || code}"?\n\nIts rooms will no longer be reachable from the team code.`)) return;
+  // Soft delete, like rooms: the data stays, only the entry point closes.
+  // Wait for the write before leaving, since leaving closes the connection.
+  connectDb();
+  db.ref(`teams/${code}/meta/deleted`).set(true)
+    .then(() => leaveTeam())
+    .catch(err => { disconnectDb(); alert('Could not delete team: ' + err.message); });
 }
 
 // ── Deleted banner ─────────────────────────────────────────────────────────
@@ -409,7 +640,7 @@ function logStamp(type) {
   // keeps the room from being filtered out as idle while it's still in use.
   db.ref().update({
     [`rooms/${state.room}/stamps/${key}`]: rec,
-    [`roomIndex/${state.room}/lastActivityAt`]: rec.epoch_ms,
+    [`${indexPath(state.room, state.roomTeam)}/lastActivityAt`]: rec.epoch_ms,
   });
   $('last').innerHTML =
     `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
@@ -746,6 +977,7 @@ let spectatePollTimer = null;
 function enterSpectate(code, name) {
   state.spectateCode = code;
   stopLobbyPolling();
+  stopTeamPolling(); // state.team stays set so ✕ returns to the team screen
   updateSpectateBadge(name || 'Live results');
   $('spectate-updated').textContent = 'Loading…';
   $('spectate-content').innerHTML = '';
@@ -759,7 +991,8 @@ function leaveSpectate() {
   state.spectateCode = null;
   clearInterval(spectatePollTimer);
   spectatePollTimer = null;
-  goToLobby();
+  if (state.team) goToTeam(state.team, state.teamName);
+  else goToLobby();
 }
 
 // Spectators only see the room name — never the join code, so someone
@@ -887,7 +1120,7 @@ function saveEdit() {
     editedAt: syncedNow(),
   };
   db.ref(`rooms/${state.room}/stamps/${state.editingKey}`).update(updates);
-  db.ref(`roomIndex/${state.room}/lastActivityAt`).set(updates.editedAt);
+  db.ref(`${indexPath(state.room, state.roomTeam)}/lastActivityAt`).set(updates.editedAt);
   closeEditSheet();
 }
 
@@ -899,7 +1132,10 @@ function init() {
   startLobbyPolling();
   const saved = localStorage.getItem(ROOM_KEY);
   if (saved) $('join-code').value = saved;
-  showScreen('screen-lobby');
+  // A device that entered a team lands straight on that team's rooms.
+  const savedTeam = localStorage.getItem(TEAM_KEY);
+  if (savedTeam) goToTeam(savedTeam);
+  else showScreen('screen-lobby');
 
   if (isInAppBrowser()) $('inapp-banner').classList.remove('hidden');
   $('inapp-close').addEventListener('click', () => $('inapp-banner').classList.add('hidden'));
@@ -907,12 +1143,34 @@ function init() {
   // Lobby
   $('btn-create').addEventListener('click', createRoom);
   $('btn-join').addEventListener('click', joinRoomFromInput);
+  $('btn-team-join').addEventListener('click', enterTeamFromInput);
+  $('btn-team-create').addEventListener('click', createTeam);
+  $('btn-team-create-toggle').addEventListener('click', () => {
+    $('team-create-section').classList.toggle('hidden');
+    if (!$('team-create-section').classList.contains('hidden')) $('team-name').focus();
+  });
 
   // Tap a live room to watch its results (read-only)
   $('room-list').addEventListener('click', e => {
     const item = e.target.closest('.room-list-item');
     if (item) enterSpectate(item.dataset.code, item.dataset.name || '');
   });
+
+  // Team screen: tap a room to time in it, or its Results link to watch it
+  $('team-room-list').addEventListener('click', e => {
+    const item = e.target.closest('.team-room-item');
+    if (!item) return;
+    if (e.target.closest('.team-room-results')) enterSpectate(item.dataset.code, item.dataset.name || '');
+    else goToTimer(item.dataset.code, item.dataset.name || '', state.team);
+  });
+  $('btn-team-room-create').addEventListener('click', createTeamRoom);
+  $('team-menu-btn').addEventListener('click', toggleMenu);
+  $('team-menu-close').addEventListener('click', hideMenu);
+  $('team-menu-rename').addEventListener('click', toggleTeamRenameField);
+  $('team-rename-save').addEventListener('click', saveTeamName);
+  $('team-menu-lobby').addEventListener('click', goToLobby);
+  $('team-menu-leave').addEventListener('click', leaveTeam);
+  $('team-menu-delete').addEventListener('click', deleteTeam);
 
   // Spectate
   $('spectate-back').addEventListener('click', leaveSpectate);
@@ -933,7 +1191,7 @@ function init() {
 
   // Deleted-room banner
   $('deleted-export').addEventListener('click', downloadCSV);
-  $('deleted-lobby').addEventListener('click', goToLobby);
+  $('deleted-lobby').addEventListener('click', exitRoom);
 
   // Edit sheet
   $('edit-overlay').addEventListener('click', closeEditSheet);
@@ -958,23 +1216,29 @@ function init() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     if (state.spectateCode) fetchSpectate();
+    else if (teamPollTimer) fetchTeam();
     else if (lobbyPollTimer) fetchRoomList();
   });
 
-  // Close menu on outside click
+  // Close menus on outside click
   document.addEventListener('click', e => {
-    const wrapper = document.querySelector('.menu-wrapper');
-    if (wrapper && !wrapper.contains(e.target)) hideMenu();
+    if (!e.target.closest('.menu-wrapper')) hideMenu();
   });
 
-  // Allow pressing Enter to join
+  // Allow pressing Enter to join / enter a team
   $('join-code').addEventListener('keydown', e => {
     if (e.key === 'Enter') joinRoomFromInput();
   });
+  $('team-code').addEventListener('keydown', e => {
+    if (e.key === 'Enter') enterTeamFromInput();
+  });
 
-  // Allow pressing Enter to save room rename
+  // Allow pressing Enter to save renames
   $('rename-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') saveRoomName();
+  });
+  $('team-rename-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveTeamName();
   });
 
   // Athlete suggestion dropdowns (timer field and edit sheet field)

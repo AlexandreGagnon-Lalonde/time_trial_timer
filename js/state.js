@@ -8,4 +8,7 @@ export const state = {
   resultsHidden: false, // room-level flag: is the room locked to outsiders in the lobby?
   roster: [],         // current room's imported athlete names (display form), sorted
   spectateCode: null, // room code being watched read-only, or null
+  team: null,         // team code whose screen we're on (or came from), or null
+  teamName: '',       // that team's display name
+  roomTeam: null,     // team the current room belongs to (meta.team), or null for an open room
 };

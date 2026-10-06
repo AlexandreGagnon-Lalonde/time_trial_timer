@@ -78,7 +78,8 @@ body {
 }
 
 /* Each active screen fills the viewport; the lobby scrolls internally if long */
-#screen-lobby:not(.hidden) {
+#screen-lobby:not(.hidden),
+#screen-team:not(.hidden) {
   height: 100%;
   overflow-y: auto;
 }
@@ -367,6 +368,53 @@ h1 {
 .code-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Six-character team codes: tighter so they fit beside the button on a phone */
+.code-input-long {
+  font-size: 22px;
+  letter-spacing: 3px;
+  min-width: 0;
+}
+
+.link-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+/* ── Team screen ───────────────────────────────────────────────────────── */
+/* A team room row is a div (tap = enter as operator) holding a real button
+   for the read-only Results view, so the two targets don't nest buttons. */
+.team-room-item {
+  cursor: pointer;
+}
+
+.team-room-results {
+  border: 0;
+  background: var(--accent-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.team-room-results:hover {
+  background: var(--accent-light);
+  text-decoration: underline;
 }
 
 .btn-create {

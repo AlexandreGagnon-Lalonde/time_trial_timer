@@ -41,7 +41,7 @@
           <input
             id="join-code"
             class="code-input"
-            maxlength="4"
+            maxlength="8"
             placeholder="CODE"
             autocomplete="off"
             autocorrect="off"
@@ -69,6 +69,80 @@
           spellcheck="false"
         />
         <button id="btn-create" class="btn-create">Create Room</button>
+
+        <div class="lobby-divider">or enter your team</div>
+
+        <div class="lobby-section">
+          <input
+            id="team-code"
+            class="code-input code-input-long"
+            maxlength="6"
+            placeholder="TEAM CODE"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="characters"
+            spellcheck="false"
+          />
+          <button id="btn-team-join" class="btn-join">Enter</button>
+        </div>
+
+        <button id="btn-team-create-toggle" class="link-btn">Create a team</button>
+        <div id="team-create-section" class="hidden">
+          <input
+            id="team-name"
+            class="room-name-input"
+            maxlength="40"
+            placeholder="Team name (e.g. Club Vélo Nord)"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="btn-team-create" class="btn-create">Create Team</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEAM (private list of a team's rooms) -->
+    <div id="screen-team" class="screen hidden">
+      <div class="wrap">
+        <div class="header-row">
+          <div id="team-badge" class="room-badge"></div>
+          <div class="menu-wrapper">
+            <button id="team-menu-btn" class="menu-btn">⋮</button>
+            <div id="team-menu" class="room-menu">
+              <div class="menu-top">
+                <span class="menu-label">Team</span>
+                <button id="team-menu-close" class="menu-close-btn">✕</button>
+              </div>
+              <button id="team-menu-rename" class="menu-item">Rename Team</button>
+              <div id="team-rename-section" class="rename-section hidden">
+                <input id="team-rename-input" maxlength="40" placeholder="New team name" />
+                <button id="team-rename-save" class="rename-save">Save</button>
+              </div>
+              <button id="team-menu-lobby" class="menu-item">Lobby</button>
+              <button id="team-menu-leave" class="menu-item">Leave Team</button>
+              <button id="team-menu-delete" class="menu-item danger">Delete Team</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lobby-live-rooms">
+          <div class="lobby-live-title">
+            <span class="live-dot"></span> Team rooms
+          </div>
+          <div id="team-room-list" class="room-list"></div>
+        </div>
+
+        <div class="lobby-divider">or create a new room</div>
+
+        <input
+          id="team-room-name"
+          class="room-name-input"
+          maxlength="40"
+          placeholder="Room name (e.g. Sprint Heat 3)"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="btn-team-room-create" class="btn-create">Create Room</button>
       </div>
     </div>
 
