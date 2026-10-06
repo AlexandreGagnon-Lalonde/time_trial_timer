@@ -52,6 +52,17 @@
       }
     },
 
+    "teamIndex": {
+      ".read": true,
+      "$id": {
+        ".write": "newData.exists()",
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
+        "createdAt": { ".validate": "newData.isNumber()" },
+        "deleted": { ".validate": "newData.isBoolean()" },
+        "$other": { ".validate": false }
+      }
+    },
+
     "teams": {
       "$team": {
         ".read": true,
@@ -60,6 +71,7 @@
           "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 60" },
           "createdAt": { ".validate": "newData.isNumber()" },
           "deleted": { ".validate": "newData.isBoolean()" },
+          "indexId": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 30 && (!data.exists() || newData.val() === data.val())" },
           "$other": { ".validate": false }
         },
         "rooms": {
