@@ -10,5 +10,6 @@ export const state = {
   spectateCode: null, // room code being watched read-only, or null
   team: null,         // team code whose screen we're on (or came from), or null
   teamName: '',       // that team's display name
+  teamIndexId: null,  // that team's id in the public teamIndex (meta.indexId), once known
   roomTeam: null,     // team the current room belongs to (meta.team), or null for an open room
 };

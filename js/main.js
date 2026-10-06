@@ -124,7 +124,7 @@ function goToLobby() {
   disconnectDb(); // free the live connection; the lobby polls over HTTPS
   const saved = localStorage.getItem(ROOM_KEY);
   if (saved) $('join-code').value = saved;
-  renderKnownTeams();
+  renderTeamList();
   startLobbyPolling();
   showScreen('screen-lobby');
 }
@@ -136,11 +136,8 @@ function updateBadge(name, code, badgeId = 'room-badge') {
     : escapeHtml(code);
 }
 
-// A team room's badge shows the team instead of the 8-character code, which
-// nobody needs to read off a screen.
 function updateRoomBadge() {
-  if (state.roomTeam) updateBadge(state.roomName || state.room, state.teamName || 'Team');
-  else updateBadge(state.roomName, state.room);
+  updateBadge(state.roomName, state.room);
 }
 
 function goToTimer(code, name = '', team = null) {
@@ -306,7 +303,7 @@ function setLobbyTab(tab, animate = false) {
     $(`lobby-${t}`).classList.toggle('hidden', t !== tab);
   });
   localStorage.setItem(LOBBY_TAB_KEY, tab);
-  if (tab === 'rooms' && lobbyPollTimer) fetchRoomList();
+  if (lobbyPollTimer) pollLobby();
   if (animate && current && current !== tab) {
     const panel = $(`lobby-${tab}`);
     const cls = LOBBY_TABS.indexOf(tab) > LOBBY_TABS.indexOf(current) ? 'slide-from-right' : 'slide-from-left';
@@ -347,10 +344,16 @@ function initialLobbyTab() {
   return getKnownTeams().length ? 'teams' : 'rooms';
 }
 
+// Each fetch skips itself unless its tab is showing.
+function pollLobby() {
+  fetchRoomList();
+  fetchTeamIndex();
+}
+
 function startLobbyPolling() {
   stopLobbyPolling();
-  fetchRoomList();
-  lobbyPollTimer = setInterval(fetchRoomList, 20000);
+  pollLobby();
+  lobbyPollTimer = setInterval(pollLobby, 20000);
 }
 
 function stopLobbyPolling() {
@@ -505,9 +508,9 @@ function deleteRoom() {
 
 let teamPollTimer = null;
 
-// Every team this device has entered, most recent first, as [{ code, name }].
-// Lives only in this browser: the lobby lists it so switching teams is one
-// tap, and nobody else's teams ever appear.
+// Every team this device has entered, most recent first, as
+// [{ code, name, indexId }]. Lives only in this browser: these are the teams
+// the lobby can open with one tap, without asking for the code.
 const TEAMS_KEY = 'ttt_teams';
 
 function getKnownTeams() {
@@ -517,11 +520,11 @@ function getKnownTeams() {
   } catch { return []; }
 }
 
-// Move the team to the front, keeping the last known name if none is given.
-function rememberTeam(code, name) {
+// Move the team to the front, keeping what's already known for anything not given.
+function rememberTeam(code, name, indexId) {
   const known = getKnownTeams();
   const prev = known.find(t => t.code === code);
-  const entry = { code, name: name || prev?.name || '' };
+  const entry = { code, name: name || prev?.name || '', indexId: indexId || prev?.indexId || null };
   localStorage.setItem(TEAMS_KEY, JSON.stringify([entry, ...known.filter(t => t.code !== code)]));
 }
 
@@ -529,18 +532,84 @@ function forgetTeam(code) {
   localStorage.setItem(TEAMS_KEY, JSON.stringify(getKnownTeams().filter(t => t.code !== code)));
 }
 
-function renderKnownTeams() {
-  const teams = getKnownTeams();
-  if (!teams.length) {
-    $('known-team-list').innerHTML = '<p class="no-rooms">Teams you enter on this device appear here.</p>';
+// ── All teams (public names) ───────────────────────────────────────────────
+// teamIndex/<id> holds each team's public name under a random id, never its
+// code, so listing every team reveals nothing that opens one. A team links to
+// its entry through meta.indexId. Teams this device knows open directly; any
+// other asks for its code, which is checked against the team tapped.
+
+let teamIndex = []; // last fetched [{ id, name }], kept while polls fail
+let pendingTeam = null; // { id, name } tapped in the list, awaiting its code
+
+function fetchTeamIndex() {
+  if (document.hidden || $('lobby-teams').classList.contains('hidden')) return;
+  fetch(`${firebaseConfig.databaseURL}/teamIndex.json`)
+    .then(r => r.json())
+    .then(data => {
+      teamIndex = Object.entries(data || {})
+        .filter(([, t]) => t && !t.deleted && t.name)
+        .map(([id, t]) => ({ id, name: t.name }));
+      renderTeamList();
+    })
+    .catch(() => {});
+}
+
+// This device's teams first (most recent first), then every other team by name.
+function renderTeamList() {
+  const known = getKnownTeams();
+  const knownIds = new Set(known.map(t => t.indexId).filter(Boolean));
+  const others = teamIndex
+    .filter(t => !knownIds.has(t.id))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (!known.length && !others.length) {
+    $('team-list').innerHTML = '<p class="no-rooms">No teams yet.</p>';
     return;
   }
-  $('known-team-list').innerHTML = teams.map(t => `
+  $('team-list').innerHTML = known.map(t => `
     <button type="button" class="room-list-item" data-code="${escapeHtml(t.code)}" data-name="${escapeHtml(t.name)}">
       <span class="room-list-name">${escapeHtml(t.name || t.code)}</span>
       <span class="room-list-view">Open ›</span>
     </button>
+  `).join('') + others.map(t => `
+    <button type="button" class="room-list-item" data-index-id="${escapeHtml(t.id)}" data-name="${escapeHtml(t.name)}">
+      <span class="room-list-name">${escapeHtml(t.name)}</span>
+      <span class="room-list-view team-list-locked">Code ›</span>
+    </button>
   `).join('');
+}
+
+// A team that isn't on this device: point the code field at it.
+function askTeamCode(id, name) {
+  pendingTeam = { id, name };
+  $('team-code-hint').textContent = `Enter the code for ${name}`;
+  $('team-code-hint').classList.remove('hidden');
+  $('team-code').value = '';
+  $('screen-lobby').scrollTo({ top: 0, behavior: 'smooth' });
+  $('team-code').focus();
+}
+
+function clearTeamCodeHint() {
+  pendingTeam = null;
+  $('team-code-hint').classList.add('hidden');
+}
+
+// Give a team made before the public list existed its entry. The transaction
+// claims meta.indexId once, so two devices opening it together can't both add one.
+function ensureTeamIndexed(code, meta) {
+  if (meta.indexId || meta.deleted || !meta.name) return;
+  connectDb();
+  const id = db.ref('teamIndex').push().key;
+  db.ref(`teams/${code}/meta/indexId`).transaction(cur => cur || id)
+    .then(({ snapshot }) => {
+      if (snapshot.val() !== id) return;
+      return db.ref(`teamIndex/${id}`).set({ name: meta.name, createdAt: meta.createdAt || syncedNow(), deleted: false });
+    })
+    .then(() => {
+      if (code === state.team) state.teamIndexId = state.teamIndexId || id;
+      rememberTeam(code, meta.name, id);
+    })
+    .catch(() => {}) // retried on the next visit
+    .finally(() => { if (!state.room) disconnectDb(); });
 }
 
 function goToTeam(code, name = '') {
@@ -550,6 +619,7 @@ function goToTeam(code, name = '') {
   state.stamps = [];
   state.team = code;
   state.teamName = name;
+  state.teamIndexId = null; // filled in by the first poll
   localStorage.setItem(TEAM_KEY, code);
   rememberTeam(code, name);
   hideMenu();
@@ -574,8 +644,13 @@ function createTeam() {
   db.ref(`teams/${code}/meta`).get()
     .then(snap => {
       if (snap.exists()) { createTeam(); return; } // code already taken — roll a new one
-      return db.ref(`teams/${code}/meta`)
-        .set({ name, createdAt: syncedNow(), deleted: false })
+      const createdAt = syncedNow();
+      const indexId = db.ref('teamIndex').push().key;
+      // One atomic write: the private team and its public name entry
+      return db.ref().update({
+        [`teams/${code}/meta`]: { name, createdAt, deleted: false, indexId },
+        [`teamIndex/${indexId}`]: { name, createdAt, deleted: false },
+      })
         .then(() => {
           // Reset the form so the lobby doesn't still show it after leaving
           $('team-name').value = '';
@@ -593,6 +668,13 @@ function enterTeamFromInput() {
     .then(meta => {
       if (!meta) { alert(`Team "${raw}" not found.`); return; }
       if (meta.deleted) { alert(`Team "${raw}" has been deleted.`); return; }
+      if (pendingTeam && meta.indexId && meta.indexId !== pendingTeam.id) {
+        alert(`That code isn't for ${pendingTeam.name}.`);
+        return;
+      }
+      clearTeamCodeHint();
+      $('team-code').value = '';
+      rememberTeam(raw, meta.name || '', meta.indexId);
       goToTeam(raw, meta.name || '');
     })
     .catch(() => alert('Cannot connect. Check your connection and try again.'));
@@ -613,8 +695,10 @@ function fetchTeam() {
       if (data.meta.name && data.meta.name !== state.teamName) {
         state.teamName = data.meta.name;
         updateBadge(state.teamName, code, 'team-badge');
-        rememberTeam(code, state.teamName);
       }
+      if (data.meta.indexId) state.teamIndexId = data.meta.indexId;
+      rememberTeam(code, state.teamName, data.meta.indexId);
+      ensureTeamIndexed(code, data.meta);
       // Every room the team has ever used stays listed (no idle cutoff), most
       // recently active first, so old results stay a tap away.
       const rooms = Object.entries(data.rooms || {})
@@ -693,7 +777,10 @@ function saveTeamName() {
   state.teamName = name;
   rememberTeam(state.team, name);
   connectDb();
-  db.ref(`teams/${state.team}/meta/name`).set(name)
+  db.ref().update({
+    [`teams/${state.team}/meta/name`]: name,
+    ...(state.teamIndexId ? { [`teamIndex/${state.teamIndexId}/name`]: name } : {}),
+  })
     // Drop the connection again unless a room was entered in the meantime
     .then(() => { if (!state.room) disconnectDb(); })
     .catch(err => alert('Could not rename team: ' + err.message));
@@ -716,7 +803,10 @@ function deleteTeam() {
   // Soft delete, like rooms: the data stays, only the entry point closes.
   // Wait for the write before leaving, since leaving closes the connection.
   connectDb();
-  db.ref(`teams/${code}/meta/deleted`).set(true)
+  db.ref().update({
+    [`teams/${code}/meta/deleted`]: true,
+    ...(state.teamIndexId ? { [`teamIndex/${state.teamIndexId}/deleted`]: true } : {}),
+  })
     .then(() => leaveTeam())
     .catch(err => { disconnectDb(); alert('Could not delete team: ' + err.message); });
 }
@@ -1237,7 +1327,7 @@ function init() {
   const saved = localStorage.getItem(ROOM_KEY);
   if (saved) $('join-code').value = saved;
   // A device that entered a team lands straight on that team's rooms.
-  renderKnownTeams();
+  renderTeamList();
   setLobbyTab(initialLobbyTab());
   const savedTeam = localStorage.getItem(TEAM_KEY);
   if (savedTeam) goToTeam(savedTeam);
@@ -1262,9 +1352,12 @@ function init() {
   });
 
   // Lobby: tap one of this device's teams to open it
-  $('known-team-list').addEventListener('click', e => {
+  // Teams tab: open a team this device knows, or ask for another team's code
+  $('team-list').addEventListener('click', e => {
     const item = e.target.closest('.room-list-item');
-    if (item) goToTeam(item.dataset.code, item.dataset.name || '');
+    if (!item) return;
+    if (item.dataset.code) goToTeam(item.dataset.code, item.dataset.name || '');
+    else askTeamCode(item.dataset.indexId, item.dataset.name || '');
   });
 
   // Team screen: tap a room to time in it, or its Results link to watch it
@@ -1328,7 +1421,7 @@ function init() {
     if (document.hidden) return;
     if (state.spectateCode) fetchSpectate();
     else if (teamPollTimer) fetchTeam();
-    else if (lobbyPollTimer) fetchRoomList();
+    else if (lobbyPollTimer) pollLobby();
   });
 
   // Close menus on outside click

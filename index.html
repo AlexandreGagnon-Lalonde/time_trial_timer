@@ -90,6 +90,7 @@
             />
             <button id="btn-team-join" class="btn-join">Enter</button>
           </div>
+          <p id="team-code-hint" class="code-hint hidden"></p>
 
           <div class="lobby-title">New team</div>
           <div class="lobby-create">
@@ -103,9 +104,9 @@
             <button id="btn-team-create" class="btn-create">Create</button>
           </div>
 
-          <!-- Teams this device has entered (stored in this browser only) -->
-          <div class="lobby-title">Your teams</div>
-          <div id="known-team-list" class="room-list"></div>
+          <!-- Every team's public name; this device's teams first and open directly -->
+          <div class="lobby-title">All teams</div>
+          <div id="team-list" class="room-list"></div>
         </div>
       </div>
     </div>

@@ -404,6 +404,19 @@ h1 {
   border-color: var(--accent);
 }
 
+/* "Enter the code for <team>" under the team code field */
+.code-hint {
+  margin: 8px 2px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* A team this device can't open yet: its action asks for the code */
+.team-list-locked {
+  color: var(--text-muted);
+}
+
 /* Six-character team codes: tighter so they fit beside the button on a phone */
 .code-input-long {
   font-size: 22px;
