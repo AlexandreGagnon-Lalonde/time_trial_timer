@@ -295,13 +295,50 @@ function fetchRoomList() {
 // remembered; a first visit opens Teams if this device already knows a team.
 const LOBBY_TAB_KEY = 'ttt_lobby_tab';
 
-function setLobbyTab(tab) {
-  ['rooms', 'teams'].forEach(t => {
+const LOBBY_TABS = ['rooms', 'teams'];
+
+// `animate` slides the incoming panel in from the side it sits on, so the
+// switch reads as moving between two pages laid side by side.
+function setLobbyTab(tab, animate = false) {
+  const current = LOBBY_TABS.find(t => !$(`lobby-${t}`).classList.contains('hidden'));
+  LOBBY_TABS.forEach(t => {
     $(`tab-${t}`).setAttribute('aria-selected', String(t === tab));
     $(`lobby-${t}`).classList.toggle('hidden', t !== tab);
   });
   localStorage.setItem(LOBBY_TAB_KEY, tab);
   if (tab === 'rooms' && lobbyPollTimer) fetchRoomList();
+  if (animate && current && current !== tab) {
+    const panel = $(`lobby-${tab}`);
+    const cls = LOBBY_TABS.indexOf(tab) > LOBBY_TABS.indexOf(current) ? 'slide-from-right' : 'slide-from-left';
+    panel.classList.remove('slide-from-right', 'slide-from-left');
+    void panel.offsetWidth; // restart the animation if it's still running
+    panel.classList.add(cls);
+  }
+}
+
+// Swipe left/right anywhere on the lobby to switch tabs. Only a clearly
+// horizontal, quick flick counts, so vertical scrolling and taps are left
+// alone; swipes starting in a text field are ignored (cursor dragging).
+function bindLobbySwipe() {
+  let start = null;
+  const lobby = $('screen-lobby');
+  lobby.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || e.target.closest('input')) { start = null; return; }
+    const t = e.touches[0];
+    start = { x: t.clientX, y: t.clientY, time: Date.now() };
+  }, { passive: true });
+  lobby.addEventListener('touchend', e => {
+    if (!start) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    const quick = Date.now() - start.time < 600;
+    start = null;
+    if (!quick || Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const current = LOBBY_TABS.find(t => !$(`lobby-${t}`).classList.contains('hidden'));
+    const next = LOBBY_TABS[LOBBY_TABS.indexOf(current) + (dx < 0 ? 1 : -1)];
+    if (next) setLobbyTab(next, true);
+  }, { passive: true });
 }
 
 function initialLobbyTab() {
@@ -1215,7 +1252,8 @@ function init() {
   $('btn-team-join').addEventListener('click', enterTeamFromInput);
   $('btn-team-create').addEventListener('click', createTeam);
   document.querySelectorAll('.lobby-tab').forEach(tab =>
-    tab.addEventListener('click', () => setLobbyTab(tab.dataset.tab)));
+    tab.addEventListener('click', () => setLobbyTab(tab.dataset.tab, true)));
+  bindLobbySwipe();
 
   // Tap a live room to watch its results (read-only)
   $('room-list').addEventListener('click', e => {

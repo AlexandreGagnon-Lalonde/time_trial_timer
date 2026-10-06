@@ -82,6 +82,7 @@ body {
 #screen-team:not(.hidden) {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden; /* the tab slide-in briefly sits off to the side */
 }
 
 #screen-timer:not(.hidden) {
@@ -264,6 +265,25 @@ h1 {
   color: var(--text);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+}
+
+/* Incoming tab panel slides in from the side it sits on */
+.lobby-panel.slide-from-right { animation: lobby-in-right 0.22s ease-out; }
+.lobby-panel.slide-from-left  { animation: lobby-in-left 0.22s ease-out; }
+
+@keyframes lobby-in-right {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes lobby-in-left {
+  from { opacity: 0; transform: translateX(-28px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-panel.slide-from-right,
+  .lobby-panel.slide-from-left { animation: none; }
 }
 
 /* Section heading inside a lobby tab or the team screen */
