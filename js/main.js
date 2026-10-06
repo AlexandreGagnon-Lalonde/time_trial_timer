@@ -724,7 +724,8 @@ function stopTeamPolling() {
   teamPollTimer = null;
 }
 
-// Tapping a room enters it as an operator; the Results link watches it.
+// Like the lobby's live rooms: tapping a room watches its results. Timing in
+// one goes through the code field, so nobody starts stamping by mis-tap.
 function renderTeamRoomList(rooms) {
   const el = $('team-room-list');
   if (!rooms.length) {
@@ -732,10 +733,10 @@ function renderTeamRoomList(rooms) {
     return;
   }
   el.innerHTML = rooms.map(r => `
-    <div class="room-list-item team-room-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}">
+    <button type="button" class="room-list-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}">
       <span class="room-list-name">${escapeHtml(r.name)}</span>
-      <button type="button" class="room-list-view team-room-results">Results ›</button>
-    </div>
+      <span class="room-list-view">Results ›</span>
+    </button>
   `).join('');
 }
 
@@ -1363,12 +1364,10 @@ function init() {
     else askTeamCode(item.dataset.indexId, item.dataset.name || '');
   });
 
-  // Team screen: tap a room to time in it, or its Results link to watch it
+  // Team screen: tap a room to watch its results (read-only), as in the lobby
   $('team-room-list').addEventListener('click', e => {
-    const item = e.target.closest('.team-room-item');
-    if (!item) return;
-    if (e.target.closest('.team-room-results')) enterSpectate(item.dataset.code, item.dataset.name || '');
-    else goToTimer(item.dataset.code, item.dataset.name || '', state.team);
+    const item = e.target.closest('.room-list-item');
+    if (item) enterSpectate(item.dataset.code, item.dataset.name || '');
   });
   $('btn-team-room-create').addEventListener('click', createTeamRoom);
   $('btn-team-room-join').addEventListener('click', () => joinRoomFromInput('team-room-code'));

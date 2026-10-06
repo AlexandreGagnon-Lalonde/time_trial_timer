@@ -423,28 +423,6 @@ h1 {
   letter-spacing: 3px;
 }
 
-/* ── Team screen ───────────────────────────────────────────────────────── */
-/* A team room row is a div (tap = enter as operator) holding a real button
-   for the read-only Results view, so the two targets don't nest buttons. */
-.team-room-item {
-  cursor: pointer;
-}
-
-.team-room-results {
-  border: 0;
-  background: var(--accent-light);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-family: inherit;
-  cursor: pointer;
-  box-shadow: none;
-}
-
-.team-room-results:hover {
-  background: var(--accent-light);
-  text-decoration: underline;
-}
-
 .btn-create {
   border: 0;
   border-radius: var(--radius-md);
