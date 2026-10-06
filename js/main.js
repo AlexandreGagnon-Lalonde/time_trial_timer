@@ -1375,7 +1375,6 @@ function init() {
   $('team-menu-close').addEventListener('click', hideMenu);
   $('team-menu-rename').addEventListener('click', toggleTeamRenameField);
   $('team-rename-save').addEventListener('click', saveTeamName);
-  $('team-menu-lobby').addEventListener('click', goToLobby);
   $('team-menu-leave').addEventListener('click', leaveTeam);
   $('team-menu-delete').addEventListener('click', deleteTeam);
 
