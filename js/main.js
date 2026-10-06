@@ -162,10 +162,11 @@ function goToTimer(code, name = '', team = null) {
   subscribeToRoom(code);
 }
 
-// Leaving a room returns to wherever it was entered from: a team's room list
-// or the public lobby.
+// Leaving a room returns to wherever it was entered from: its team's room
+// list, the team page an open room was joined from, or the public lobby.
 function exitRoom() {
   if (state.roomTeam) goToTeam(state.roomTeam, state.team === state.roomTeam ? state.teamName : '');
+  else if (state.team) goToTeam(state.team, state.teamName);
   else goToLobby();
 }
 
@@ -405,8 +406,9 @@ function createRoom() {
     .catch(err => alert('Could not create room: ' + err.message));
 }
 
-function joinRoomFromInput() {
-  const raw = $('join-code').value.trim().toUpperCase();
+// Used by the lobby's Rooms tab and the team page, each with its own field.
+function joinRoomFromInput(inputId = 'join-code') {
+  const raw = $(inputId).value.trim().toUpperCase();
   // 4 for open rooms, 8 for a team room whose code a teammate passed along
   if (raw.length !== ROOM_CODE_LEN && raw.length !== TEAM_ROOM_CODE_LEN) {
     alert(`Please enter a ${ROOM_CODE_LEN}-character room code.`);
@@ -628,6 +630,7 @@ function goToTeam(code, name = '') {
   stopLobbyPolling();
   updateBadge(name, code, 'team-badge');
   $('team-room-name').value = '';
+  $('team-room-code').value = '';
   startTeamPolling();
   showScreen('screen-team');
 }
@@ -1338,7 +1341,7 @@ function init() {
 
   // Lobby
   $('btn-create').addEventListener('click', createRoom);
-  $('btn-join').addEventListener('click', joinRoomFromInput);
+  $('btn-join').addEventListener('click', () => joinRoomFromInput());
   $('btn-team-join').addEventListener('click', enterTeamFromInput);
   $('btn-team-create').addEventListener('click', createTeam);
   document.querySelectorAll('.lobby-tab').forEach(tab =>
@@ -1368,6 +1371,7 @@ function init() {
     else goToTimer(item.dataset.code, item.dataset.name || '', state.team);
   });
   $('btn-team-room-create').addEventListener('click', createTeamRoom);
+  $('btn-team-room-join').addEventListener('click', () => joinRoomFromInput('team-room-code'));
   $('team-menu-btn').addEventListener('click', toggleMenu);
   $('team-menu-close').addEventListener('click', hideMenu);
   $('team-menu-rename').addEventListener('click', toggleTeamRenameField);
@@ -1432,6 +1436,9 @@ function init() {
   // Allow pressing Enter to join / enter a team
   $('join-code').addEventListener('keydown', e => {
     if (e.key === 'Enter') joinRoomFromInput();
+  });
+  $('team-room-code').addEventListener('keydown', e => {
+    if (e.key === 'Enter') joinRoomFromInput('team-room-code');
   });
   $('team-code').addEventListener('keydown', e => {
     if (e.key === 'Enter') enterTeamFromInput();
