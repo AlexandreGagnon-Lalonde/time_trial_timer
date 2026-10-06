@@ -238,24 +238,57 @@ h1 {
 }
 
 /* ── Lobby ─────────────────────────────────────────────────────────────── */
-.room-name-input {
-  margin-bottom: 10px;
+/* Segmented Rooms | Teams switch */
+.lobby-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
 }
 
-.lobby-live-rooms {
-  margin: 20px 0 4px;
+.lobby-tab {
+  flex: 1;
+  padding: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
 }
 
-.lobby-live-title {
+.lobby-tab[aria-selected="true"] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Section heading inside a lobby tab or the team screen */
+.lobby-title {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .6px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin: 22px 0 8px;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Name field + Create button on one row */
+.lobby-create {
+  display: flex;
+  gap: 10px;
+}
+
+.lobby-create input {
+  flex: 1;
+  min-width: 0;
+  padding: 13px 14px;
 }
 
 .live-dot {
@@ -327,30 +360,11 @@ h1 {
 .lobby-section {
   display: flex;
   gap: 10px;
-  margin: 10px 0;
-}
-
-.lobby-divider {
-  text-align: center;
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 18px 0 10px;
-  position: relative;
-}
-
-.lobby-divider::before,
-.lobby-divider::after {
-  content: '';
-  display: inline-block;
-  width: 28%;
-  height: 1px;
-  background: var(--border);
-  vertical-align: middle;
-  margin: 0 8px;
 }
 
 .code-input {
   flex: 1;
+  min-width: 0;
   font-size: 28px;
   font-weight: 800;
   padding: 14px;
@@ -374,25 +388,6 @@ h1 {
 .code-input-long {
   font-size: 22px;
   letter-spacing: 3px;
-  min-width: 0;
-}
-
-.link-btn {
-  display: block;
-  margin: 12px auto 0;
-  padding: 6px 10px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.link-btn:hover {
-  background: transparent;
-  text-decoration: underline;
 }
 
 /* ── Team screen ───────────────────────────────────────────────────────── */
@@ -418,12 +413,12 @@ h1 {
 }
 
 .btn-create {
-  width: 100%;
   border: 0;
-  border-radius: var(--radius-lg);
-  padding: 22px 10px;
-  font-size: 20px;
+  border-radius: var(--radius-md);
+  padding: 0 22px;
+  font-size: 17px;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
   background: var(--accent);
   color: #fff;

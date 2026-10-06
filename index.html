@@ -35,68 +35,77 @@
     </div>
 
     <!-- LOBBY -->
+    <!-- Two tabs with the same shape: join with a code, the list, create new -->
     <div id="screen-lobby" class="screen">
       <div class="wrap">
-        <div class="lobby-section">
-          <input
-            id="join-code"
-            class="code-input"
-            maxlength="8"
-            placeholder="CODE"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="characters"
-            spellcheck="false"
-          />
-          <button id="btn-join" class="btn-join">Join</button>
+        <div class="lobby-tabs" role="tablist">
+          <button id="tab-rooms" class="lobby-tab" role="tab" data-tab="rooms">Rooms</button>
+          <button id="tab-teams" class="lobby-tab" role="tab" data-tab="teams">Teams</button>
         </div>
 
-        <div class="lobby-live-rooms">
-          <div class="lobby-live-title">
-            <span class="live-dot"></span> Live rooms
+        <!-- Rooms: open rooms anyone can watch -->
+        <div id="lobby-rooms" class="lobby-panel" role="tabpanel">
+          <div class="lobby-section">
+            <input
+              id="join-code"
+              class="code-input"
+              maxlength="8"
+              placeholder="CODE"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <button id="btn-join" class="btn-join">Join</button>
           </div>
+
+          <div class="lobby-title">New room</div>
+          <div class="lobby-create">
+            <input
+              id="room-name"
+              maxlength="40"
+              placeholder="Room name"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="btn-create" class="btn-create">Create</button>
+          </div>
+
+          <div class="lobby-title"><span class="live-dot"></span> Live rooms</div>
           <div id="room-list" class="room-list"></div>
         </div>
 
-        <div class="lobby-divider">or create a new room</div>
+        <!-- Teams: private groups of rooms behind a team code -->
+        <div id="lobby-teams" class="lobby-panel hidden" role="tabpanel">
+          <div class="lobby-section">
+            <input
+              id="team-code"
+              class="code-input code-input-long"
+              maxlength="6"
+              placeholder="TEAM CODE"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <button id="btn-team-join" class="btn-join">Enter</button>
+          </div>
 
-        <input
-          id="room-name"
-          class="room-name-input"
-          maxlength="40"
-          placeholder="Room name (e.g. Sprint Heat 3)"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button id="btn-create" class="btn-create">Create Room</button>
+          <div class="lobby-title">New team</div>
+          <div class="lobby-create">
+            <input
+              id="team-name"
+              maxlength="40"
+              placeholder="Team name"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="btn-team-create" class="btn-create">Create</button>
+          </div>
 
-        <div class="lobby-divider">or enter your team</div>
-
-        <div class="lobby-section">
-          <input
-            id="team-code"
-            class="code-input code-input-long"
-            maxlength="6"
-            placeholder="TEAM CODE"
-            autocomplete="off"
-            autocorrect="off"
-            autocapitalize="characters"
-            spellcheck="false"
-          />
-          <button id="btn-team-join" class="btn-join">Enter</button>
-        </div>
-
-        <button id="btn-team-create-toggle" class="link-btn">Create a team</button>
-        <div id="team-create-section" class="hidden">
-          <input
-            id="team-name"
-            class="room-name-input"
-            maxlength="40"
-            placeholder="Team name (e.g. Club Vélo Nord)"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <button id="btn-team-create" class="btn-create">Create Team</button>
+          <!-- Teams this device has entered (stored in this browser only) -->
+          <div class="lobby-title">Your teams</div>
+          <div id="known-team-list" class="room-list"></div>
         </div>
       </div>
     </div>
@@ -125,24 +134,20 @@
           </div>
         </div>
 
-        <div class="lobby-live-rooms">
-          <div class="lobby-live-title">
-            <span class="live-dot"></span> Team rooms
-          </div>
-          <div id="team-room-list" class="room-list"></div>
+        <div class="lobby-title">New room</div>
+        <div class="lobby-create">
+          <input
+            id="team-room-name"
+            maxlength="40"
+            placeholder="Room name"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="btn-team-room-create" class="btn-create">Create</button>
         </div>
 
-        <div class="lobby-divider">or create a new room</div>
-
-        <input
-          id="team-room-name"
-          class="room-name-input"
-          maxlength="40"
-          placeholder="Room name (e.g. Sprint Heat 3)"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button id="btn-team-room-create" class="btn-create">Create Room</button>
+        <div class="lobby-title"><span class="live-dot"></span> Team rooms</div>
+        <div id="team-room-list" class="room-list"></div>
       </div>
     </div>
 
