@@ -680,11 +680,16 @@ function renderLookupOptions() {
     result.innerHTML = '';
     return;
   }
-  const matches = q ? finished.filter(f => f.athlete.toLowerCase().includes(q)) : finished;
+  // Fastest first, ranked before filtering so a match keeps its overall place.
+  const ranked = [...finished]
+    .sort((a, b) => a.elapsedMs - b.elapsedMs)
+    .map((f, i) => ({ ...f, rank: i + 1 }));
+  const matches = q ? ranked.filter(f => f.athlete.toLowerCase().includes(q)) : ranked;
   opts.innerHTML = matches.length
     ? matches.map(f =>
         `<button type="button" class="lookup-option" data-athlete="${escapeHtml(f.athlete)}">` +
-        `<span>${escapeHtml(f.athlete)}</span>` +
+        `<span class="lookup-option-rank">${f.rank}</span>` +
+        `<span class="lookup-option-name">${escapeHtml(f.athlete)}</span>` +
         `<span class="lookup-option-time">${formatElapsed(f.elapsedMs)}</span></button>`
       ).join('')
     : '<p class="lookup-empty">No match.</p>';
