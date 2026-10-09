@@ -129,11 +129,56 @@ function goToLobby() {
   showScreen('screen-lobby');
 }
 
+// Small clipboard glyph for the copy button inside a badge
+const COPY_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
+  + '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+  + '<path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+  + '</svg>';
+const COPIED_ICON = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">'
+  + '<path d="M3 8.5l3.2 3.2L13 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+  + '</svg>';
+
 function updateBadge(name, code, badgeId = 'room-badge') {
   const badge = $(badgeId);
+  const safeCode = escapeHtml(code);
+  const copyBtn = `<button type="button" class="badge-copy" data-code="${safeCode}" title="Copy code" aria-label="Copy code">${COPY_ICON}</button>`;
   badge.innerHTML = name
-    ? `${escapeHtml(name)} <span class="badge-code">${escapeHtml(code)}</span>`
-    : escapeHtml(code);
+    ? `${escapeHtml(name)} <span class="badge-code">${safeCode}</span>${copyBtn}`
+    : `${safeCode}${copyBtn}`;
+}
+
+// Copy a badge's code to the clipboard and flash a check mark on the button.
+function copyBadgeCode(btn) {
+  const code = btn.dataset.code;
+  const done = () => {
+    btn.innerHTML = COPIED_ICON;
+    btn.classList.add('copied');
+    clearTimeout(btn._copyTimer);
+    btn._copyTimer = setTimeout(() => {
+      btn.innerHTML = COPY_ICON;
+      btn.classList.remove('copied');
+    }, 1200);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(code).then(done).catch(() => legacyCopy(code) && done());
+  } else if (legacyCopy(code)) {
+    done();
+  }
+}
+
+// Fallback for browsers without the async clipboard API (or non-secure origins)
+function legacyCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
 }
 
 function updateRoomBadge() {
@@ -1339,6 +1384,12 @@ function init() {
 
   if (isInAppBrowser()) $('inapp-banner').classList.remove('hidden');
   $('inapp-close').addEventListener('click', () => $('inapp-banner').classList.add('hidden'));
+
+  // Copy buttons live inside badges that are re-rendered, so delegate
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.badge-copy');
+    if (btn) copyBadgeCode(btn);
+  });
 
   // Lobby
   $('btn-create').addEventListener('click', createRoom);

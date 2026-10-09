@@ -576,6 +576,35 @@ h1 {
   text-transform: uppercase;
 }
 
+/* Tiny copy button sitting right after the code inside a badge */
+.badge-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: -3px -4px -3px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: .6;
+  cursor: pointer;
+}
+
+.badge-copy:hover,
+.badge-copy:focus-visible {
+  opacity: 1;
+  background: rgba(0, 0, 0, .06);
+  outline: none;
+}
+
+.badge-copy.copied {
+  opacity: 1;
+  color: var(--start, inherit);
+}
+
 .menu-btn {
   background: transparent;
   border: 0;
