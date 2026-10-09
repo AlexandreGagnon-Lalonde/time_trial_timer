@@ -35,17 +35,24 @@
     </div>
 
     <!-- LOBBY -->
-    <!-- Two tabs with the same shape: join with a code, the list, create new -->
-    <div id="screen-lobby" class="screen">
+    <!-- Two tabs with the same shape: one field that joins by code or creates
+         by name, depending on the Join/Create switch, then the list -->
+    <div id="screen-lobby" class="screen" data-entry="join">
       <div class="wrap">
-        <div class="lobby-tabs" role="tablist">
-          <button id="tab-rooms" class="lobby-tab" role="tab" data-tab="rooms">Rooms</button>
-          <button id="tab-teams" class="lobby-tab" role="tab" data-tab="teams">Teams</button>
+        <div class="lobby-top">
+          <div class="lobby-tabs" role="tablist">
+            <button id="tab-rooms" class="lobby-tab" role="tab" data-tab="rooms">Rooms</button>
+            <button id="tab-teams" class="lobby-tab" role="tab" data-tab="teams">Teams</button>
+          </div>
+          <div class="entry-toggle" role="group" aria-label="Join or create">
+            <button type="button" class="entry-btn" data-entry="join" aria-pressed="true">Join</button>
+            <button type="button" class="entry-btn" data-entry="create" aria-pressed="false">Create</button>
+          </div>
         </div>
 
         <!-- Rooms: open rooms anyone can watch -->
         <div id="lobby-rooms" class="lobby-panel" role="tabpanel">
-          <div class="lobby-section">
+          <div class="lobby-section entry-join">
             <input
               id="join-code"
               class="code-input"
@@ -59,8 +66,7 @@
             <button id="btn-join" class="btn-join">Join</button>
           </div>
 
-          <div class="lobby-title">New room</div>
-          <div class="lobby-create">
+          <div class="lobby-create entry-create">
             <input
               id="room-name"
               maxlength="40"
@@ -77,7 +83,7 @@
 
         <!-- Teams: private groups of rooms behind a team code -->
         <div id="lobby-teams" class="lobby-panel hidden" role="tabpanel">
-          <div class="lobby-section">
+          <div class="lobby-section entry-join">
             <input
               id="team-code"
               class="code-input code-input-long"
@@ -90,10 +96,9 @@
             />
             <button id="btn-team-join" class="btn-join">Enter</button>
           </div>
-          <p id="team-code-hint" class="code-hint hidden"></p>
+          <p id="team-code-hint" class="code-hint entry-join hidden"></p>
 
-          <div class="lobby-title">New team</div>
-          <div class="lobby-create">
+          <div class="lobby-create entry-create">
             <input
               id="team-name"
               maxlength="40"
@@ -112,10 +117,14 @@
     </div>
 
     <!-- TEAM (private list of a team's rooms) -->
-    <div id="screen-team" class="screen hidden">
+    <div id="screen-team" class="screen hidden" data-entry="join">
       <div class="wrap">
         <div class="header-row">
           <div id="team-badge" class="room-badge"></div>
+          <div class="entry-toggle" role="group" aria-label="Join or create">
+            <button type="button" class="entry-btn" data-entry="join" aria-pressed="true">Join</button>
+            <button type="button" class="entry-btn" data-entry="create" aria-pressed="false">Create</button>
+          </div>
           <div class="menu-wrapper">
             <button id="team-menu-btn" class="menu-btn">⋮</button>
             <div id="team-menu" class="room-menu">
@@ -134,7 +143,7 @@
           </div>
         </div>
 
-        <div class="lobby-section">
+        <div class="lobby-section entry-join">
           <input
             id="team-room-code"
             class="code-input"
@@ -148,8 +157,7 @@
           <button id="btn-team-room-join" class="btn-join">Join</button>
         </div>
 
-        <div class="lobby-title">New room</div>
-        <div class="lobby-create">
+        <div class="lobby-create entry-create">
           <input
             id="team-room-name"
             maxlength="40"

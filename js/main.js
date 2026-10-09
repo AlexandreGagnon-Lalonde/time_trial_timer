@@ -120,6 +120,7 @@ function goToLobby() {
   state.teamName = '';
   state.stamps = [];
   hideMenu();
+  setEntryMode('screen-lobby', 'join');
   disableWakeLock();
   disconnectDb(); // free the live connection; the lobby polls over HTTPS
   const saved = localStorage.getItem(ROOM_KEY);
@@ -349,6 +350,7 @@ function setLobbyTab(tab, animate = false) {
     $(`lobby-${t}`).classList.toggle('hidden', t !== tab);
   });
   localStorage.setItem(LOBBY_TAB_KEY, tab);
+  if (current && current !== tab) setEntryMode('screen-lobby', 'join');
   if (lobbyPollTimer) pollLobby();
   if (animate && current && current !== tab) {
     const panel = $(`lobby-${tab}`);
@@ -427,6 +429,54 @@ function renderRoomList(rooms) {
   `).join('');
 }
 
+// ── Join / Create switch ───────────────────────────────────────────────────
+
+// The lobby and the team page each show one entry field at a time: a code
+// field in Join mode, a name field in Create mode. Join is the default, so
+// creating is always a deliberate tap.
+function setEntryMode(screenId, mode, focus = false) {
+  const screen = $(screenId);
+  screen.dataset.entry = mode;
+  screen.querySelectorAll('.entry-btn').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.entry === mode)));
+  if (focus) {
+    const input = [...screen.querySelectorAll(`.entry-${mode} input`)].find(i => i.offsetParent !== null);
+    input?.focus();
+  }
+}
+
+// Before creating, look the typed name up as a code. This is an exact
+// lookup, not a guess: a real name is simply never found. If it is a live
+// room or team, offer to join it instead. Resolves true to go ahead.
+function confirmNameIsNotACode(name) {
+  const code = name.toUpperCase();
+  if (!/^[A-Z0-9]+$/.test(code)) return Promise.resolve(true);
+  const lookups = [];
+  if (code.length === ROOM_CODE_LEN || code.length === TEAM_ROOM_CODE_LEN) lookups.push(['room', `rooms/${code}/meta`]);
+  if (code.length === TEAM_CODE_LEN) lookups.push(['team', `teams/${code}/meta`]);
+  if (!lookups.length) return Promise.resolve(true);
+  return Promise.all(lookups.map(([kind, path]) =>
+    fetch(`${firebaseConfig.databaseURL}/${path}.json`)
+      .then(r => r.json())
+      .then(meta => (meta && !meta.deleted ? { kind, meta } : null))
+      .catch(() => null)))
+    .then(found => {
+      const hit = found.find(Boolean);
+      if (!hit) return true;
+      const label = `${hit.kind} "${hit.meta.name || code}"`;
+      if (confirm(`"${code}" is the code of the ${label}.\n\nOK creates a new ${hit.kind} named "${name}" anyway.\nCancel joins the ${label} instead.`)) return true;
+      if (hit.kind === 'team') {
+        clearTeamCodeHint();
+        $('team-code').value = code;
+        enterTeamFromInput();
+      } else {
+        $('join-code').value = code;
+        joinRoomFromInput('join-code');
+      }
+      return false;
+    });
+}
+
 // ── Room actions ───────────────────────────────────────────────────────────
 
 function createRoom() {
@@ -436,11 +486,15 @@ function createRoom() {
     $('room-name').focus();
     return;
   }
+  confirmNameIsNotACode(name).then(ok => { if (ok) createRoomNamed(name); });
+}
+
+function createRoomNamed(name) {
   connectDb();
   const code = generateCode();
   db.ref(`rooms/${code}/meta`).get()
     .then(snap => {
-      if (snap.exists()) { createRoom(); return; } // code already taken — roll a new one
+      if (snap.exists()) { createRoomNamed(name); return; } // code already taken — roll a new one
       const meta = { name, createdAt: syncedNow(), deleted: false };
       // Single atomic write so the room and the lobby index can't diverge
       return db.ref().update({
@@ -628,6 +682,7 @@ function renderTeamList() {
 // A team that isn't on this device: point the code field at it.
 function askTeamCode(id, name) {
   pendingTeam = { id, name };
+  setEntryMode('screen-lobby', 'join');
   $('team-code-hint').textContent = `Enter the code for ${name}`;
   $('team-code-hint').classList.remove('hidden');
   $('team-code').value = '';
@@ -676,6 +731,7 @@ function goToTeam(code, name = '') {
   updateBadge(name, code, 'team-badge');
   $('team-room-name').value = '';
   $('team-room-code').value = '';
+  setEntryMode('screen-team', 'join');
   startTeamPolling();
   showScreen('screen-team');
 }
@@ -687,11 +743,15 @@ function createTeam() {
     $('team-name').focus();
     return;
   }
+  confirmNameIsNotACode(name).then(ok => { if (ok) createTeamNamed(name); });
+}
+
+function createTeamNamed(name) {
   connectDb();
   const code = generateCode(TEAM_CODE_LEN);
   db.ref(`teams/${code}/meta`).get()
     .then(snap => {
-      if (snap.exists()) { createTeam(); return; } // code already taken — roll a new one
+      if (snap.exists()) { createTeamNamed(name); return; } // code already taken — roll a new one
       const createdAt = syncedNow();
       const indexId = db.ref('teamIndex').push().key;
       // One atomic write: the private team and its public name entry
@@ -793,11 +853,17 @@ function createTeamRoom() {
     return;
   }
   const team = state.team;
+  confirmNameIsNotACode(name).then(ok => {
+    if (ok && team === state.team) createTeamRoomNamed(name, team);
+  });
+}
+
+function createTeamRoomNamed(name, team) {
   connectDb();
   const code = generateCode(TEAM_ROOM_CODE_LEN);
   db.ref(`rooms/${code}/meta`).get()
     .then(snap => {
-      if (snap.exists()) { createTeamRoom(); return; } // code already taken — roll a new one
+      if (snap.exists()) { createTeamRoomNamed(name, team); return; } // code already taken — roll a new one
       const createdAt = syncedNow();
       // One atomic write: the room itself (tagged with its team) and the
       // team's own index entry, so neither can exist without the other.
@@ -1393,6 +1459,8 @@ function init() {
 
   // Lobby
   $('btn-create').addEventListener('click', createRoom);
+  document.querySelectorAll('.entry-btn').forEach(btn =>
+    btn.addEventListener('click', () => setEntryMode(btn.closest('.screen').id, btn.dataset.entry, true)));
   $('btn-join').addEventListener('click', () => joinRoomFromInput());
   $('btn-team-join').addEventListener('click', enterTeamFromInput);
   $('btn-team-create').addEventListener('click', createTeam);

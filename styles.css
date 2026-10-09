@@ -239,14 +239,66 @@ h1 {
 }
 
 /* ── Lobby ─────────────────────────────────────────────────────────────── */
+/* Rooms | Teams tabs with the small Join | Create switch beside them */
+.lobby-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
 /* Segmented Rooms | Teams switch */
 .lobby-tabs {
+  flex: 1;
   display: flex;
   gap: 4px;
   padding: 4px;
-  margin-bottom: 16px;
   background: var(--surface-alt);
   border-radius: var(--radius-md);
+}
+
+/* Small Join | Create switch: decides what the single entry field does */
+.entry-toggle {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+}
+
+.entry-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.entry-btn[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Only the row for the current mode is shown */
+.screen[data-entry="join"] .entry-create,
+.screen[data-entry="create"] .entry-join {
+  display: none;
+}
+
+/* On the team page the switch sits beside the menu button */
+.header-row .entry-toggle {
+  margin-left: auto;
+}
+
+.header-row:has(.entry-toggle) {
+  gap: 8px;
 }
 
 .lobby-tab {
