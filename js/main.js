@@ -505,9 +505,57 @@ function createRoomNamed(name) {
     .catch(err => alert('Could not create room: ' + err.message));
 }
 
+// ── Wrong-code jail ────────────────────────────────────────────────────────
+
+// Every code field shares one counter of codes that matched nothing. Each
+// miss gets the next message; the fifth locks code entry for five minutes.
+// The count clears five minutes after the first miss, or on a right code.
+// Kept in localStorage so reloading the page doesn't get anyone out early.
+const WRONG_CODE_KEY = 'ttt_wrong_codes';
+const WRONG_CODE_WINDOW_MS = 5 * 60 * 1000;
+const WRONG_CODE_MESSAGES = [
+  "It's ok. You'll get it next time",
+  "You're not that old",
+  'You could try CTRLC + CTRLV',
+  'One shot. One opportunity. To see everything you ever wanted',
+  'Jail. 5 minutes',
+];
+
+function readWrongCodes() {
+  try {
+    const v = JSON.parse(localStorage.getItem(WRONG_CODE_KEY));
+    if (v && Date.now() - v.since < WRONG_CODE_WINDOW_MS) return v;
+  } catch (_) { /* unreadable: start over */ }
+  return { count: 0, since: 0 };
+}
+
+// While locked out, the message to show instead of looking the code up.
+function jailMessage() {
+  const { count, since } = readWrongCodes();
+  if (count < WRONG_CODE_MESSAGES.length) return null;
+  const mins = Math.max(1, Math.ceil((since + WRONG_CODE_WINDOW_MS - Date.now()) / 60000));
+  return `Jail. ${mins} minute${mins === 1 ? '' : 's'} left`;
+}
+
+function wrongCode(reason) {
+  const prev = readWrongCodes();
+  const count = prev.count + 1;
+  // The window starts at the first miss; the fifth restarts it so jail
+  // always lasts the full five minutes.
+  const since = prev.count === 0 || count === WRONG_CODE_MESSAGES.length ? Date.now() : prev.since;
+  try { localStorage.setItem(WRONG_CODE_KEY, JSON.stringify({ count, since })); } catch (_) {}
+  alert(`${reason}\n\n${WRONG_CODE_MESSAGES[count - 1]}`);
+}
+
+function rightCode() {
+  try { localStorage.removeItem(WRONG_CODE_KEY); } catch (_) {}
+}
+
 // Used by the lobby's Rooms tab and the team page, each with its own field.
 function joinRoomFromInput(inputId = 'join-code') {
   const raw = $(inputId).value.trim().toUpperCase();
+  const jailed = jailMessage();
+  if (jailed) { alert(jailed); return; }
   // 4 for open rooms, 8 for a team room whose code a teammate passed along
   if (raw.length !== ROOM_CODE_LEN && raw.length !== TEAM_ROOM_CODE_LEN) {
     alert(`Please enter a ${ROOM_CODE_LEN}-character room code.`);
@@ -520,10 +568,11 @@ function joinRoomFromInput(inputId = 'join-code') {
       if (!snap.exists()) {
         // Offline fallback: trust a saved code we've been in before
         if (localStorage.getItem(ROOM_KEY) === raw) { goToTimer(raw); return; }
-        alert(`Room "${raw}" not found.`);
+        wrongCode(`Room "${raw}" not found.`);
         return;
       }
       if (snap.val()?.deleted) { alert(`Room "${raw}" has been deleted.`); return; }
+      rightCode();
       const { name = '', team = null } = snap.val() || {};
       if (!team) { goToTimer(raw, name); return; }
       // A team room joined by code: pick up the team's name for the badge,
@@ -770,16 +819,19 @@ function createTeamNamed(name) {
 
 function enterTeamFromInput() {
   const raw = $('team-code').value.trim().toUpperCase();
+  const jailed = jailMessage();
+  if (jailed) { alert(jailed); return; }
   if (raw.length !== TEAM_CODE_LEN) { alert(`Please enter a ${TEAM_CODE_LEN}-character team code.`); return; }
   fetch(`${firebaseConfig.databaseURL}/teams/${raw}/meta.json`)
     .then(r => r.json())
     .then(meta => {
-      if (!meta) { alert(`Team "${raw}" not found.`); return; }
+      if (!meta) { wrongCode(`Team "${raw}" not found.`); return; }
       if (meta.deleted) { alert(`Team "${raw}" has been deleted.`); return; }
       if (pendingTeam && meta.indexId && meta.indexId !== pendingTeam.id) {
-        alert(`That code isn't for ${pendingTeam.name}.`);
+        wrongCode(`That code isn't for ${pendingTeam.name}.`);
         return;
       }
+      rightCode();
       clearTeamCodeHint();
       $('team-code').value = '';
       rememberTeam(raw, meta.name || '', meta.indexId);
