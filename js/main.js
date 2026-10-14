@@ -111,6 +111,62 @@ function showScreen(id) {
   $(id).classList.remove('hidden');
 }
 
+// ── History ────────────────────────────────────────────────────────────────
+// Every screen below the lobby gets a browser history entry, so the system
+// back gesture (iOS edge swipe, Android back button, the browser's own back)
+// returns to the previous screen instead of leaving the page. Only the depth
+// is tracked: the exit functions already know where each screen returns to.
+
+let navDepth = 0; // entries this page has pushed on top of its own
+
+// How deep the current screen sits: lobby 0, team 1, a room or spectate 1
+// or 2 depending on whether it was opened from a team.
+function screenDepth() {
+  if (state.room || state.spectateCode) return state.team ? 2 : 1;
+  return state.team ? 1 : 0;
+}
+
+// Called at the end of every forward move so the new screen can be backed
+// out of. A back-driven move lands at or below navDepth and pushes nothing.
+function syncHistory() {
+  const depth = screenDepth();
+  if (depth <= navDepth) return;
+  history.pushState({ depth }, '');
+  navDepth = depth;
+}
+
+// Navigate one level up from whatever screen is showing.
+function exitScreen() {
+  if (state.spectateCode) exitSpectate();
+  else if (state.room) exitRoom();
+  else if (state.team) goToLobby();
+}
+
+// In-app back buttons go through history so the entry stack stays in step;
+// popstate then does the navigation. Without an entry (nothing was pushed),
+// navigate directly.
+function goBack() {
+  if (navDepth > 0) history.back();
+  else exitScreen();
+}
+
+function bindHistory() {
+  window.addEventListener('popstate', e => {
+    const depth = e.state?.depth ?? 0;
+    if (depth === navDepth) return;
+    // Browser forward: there's nothing ahead to show, so undo it.
+    if (depth > navDepth) { history.back(); return; }
+    // Mid-hold, switching screens would drop the press; put the entry back.
+    if ($('hold-overlay').classList.contains('showing')) {
+      history.pushState({ depth: navDepth }, '');
+      return;
+    }
+    const levels = navDepth - depth;
+    navDepth = depth;
+    for (let i = 0; i < levels; i++) exitScreen();
+  });
+}
+
 function goToLobby() {
   detachFirebaseListeners();
   stopTeamPolling();
@@ -206,6 +262,7 @@ function goToTimer(code, name = '', team = null) {
   enableWakeLock();
   showScreen('screen-timer');
   subscribeToRoom(code);
+  syncHistory();
 }
 
 // Leaving a room returns to wherever it was entered from: its team's room
@@ -630,7 +687,7 @@ function saveRoomName() {
 function leaveRoom() {
   hideMenu();
   localStorage.removeItem(ROOM_KEY);
-  exitRoom();
+  goBack();
 }
 
 function deleteRoom() {
@@ -647,7 +704,8 @@ function deleteRoom() {
 
   localStorage.removeItem(ROOM_KEY);
   showDeletedBanner();
-  setTimeout(exitRoom, 6000);
+  // Only if nobody backed out of the deleted room in the meantime
+  setTimeout(() => { if (state.room === code) goBack(); }, 6000);
 }
 
 // ── Teams ──────────────────────────────────────────────────────────────────
@@ -783,6 +841,7 @@ function goToTeam(code, name = '') {
   setEntryMode('screen-team', 'join');
   startTeamPolling();
   showScreen('screen-team');
+  syncHistory();
 }
 
 function createTeam() {
@@ -960,7 +1019,7 @@ function leaveTeam() {
   hideMenu();
   localStorage.removeItem(TEAM_KEY);
   forgetTeam(state.team);
-  goToLobby();
+  goBack();
 }
 
 function deleteTeam() {
@@ -1346,9 +1405,14 @@ function enterSpectate(code, name) {
   fetchSpectate();
   clearInterval(spectatePollTimer);
   spectatePollTimer = setInterval(fetchSpectate, 15000);
+  syncHistory();
 }
 
 function leaveSpectate() {
+  goBack();
+}
+
+function exitSpectate() {
   state.spectateCode = null;
   clearInterval(spectatePollTimer);
   spectatePollTimer = null;
@@ -1489,6 +1553,7 @@ function saveEdit() {
 
 function init() {
   disconnectDb(); // no live connection until someone joins a room as operator
+  bindHistory();
   tick();
   startLobbyPolling();
   const saved = localStorage.getItem(ROOM_KEY);
@@ -1568,7 +1633,7 @@ function init() {
 
   // Deleted-room banner
   $('deleted-export').addEventListener('click', downloadCSV);
-  $('deleted-lobby').addEventListener('click', exitRoom);
+  $('deleted-lobby').addEventListener('click', goBack);
 
   // Edit sheet
   $('edit-overlay').addEventListener('click', closeEditSheet);
