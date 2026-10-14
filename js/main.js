@@ -11,7 +11,6 @@ import { downloadCSV } from './csv.js';
 import { parseNames, rosterKey, matchRoster } from './roster.js';
 
 const ROOM_KEY = 'ttt_room_code';
-const TEAM_KEY = 'ttt_team_code';
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excludes O/0 and I/1 to avoid confusion
 
 // Code lengths. Open rooms keep 4 characters because people type them. The
@@ -829,7 +828,6 @@ function goToTeam(code, name = '') {
   state.team = code;
   state.teamName = name;
   state.teamIndexId = null; // filled in by the first poll
-  localStorage.setItem(TEAM_KEY, code);
   rememberTeam(code, name);
   hideMenu();
   disableWakeLock();
@@ -1017,7 +1015,6 @@ function saveTeamName() {
 // Forget the team on this device and go back to the lobby.
 function leaveTeam() {
   hideMenu();
-  localStorage.removeItem(TEAM_KEY);
   forgetTeam(state.team);
   goBack();
 }
@@ -1558,12 +1555,11 @@ function init() {
   startLobbyPolling();
   const saved = localStorage.getItem(ROOM_KEY);
   if (saved) $('join-code').value = saved;
-  // A device that entered a team lands straight on that team's rooms.
+  // Always start in the lobby; a device's teams are listed first on the
+  // Teams tab, which opens by default once it has any.
   renderTeamList();
   setLobbyTab(initialLobbyTab());
-  const savedTeam = localStorage.getItem(TEAM_KEY);
-  if (savedTeam) goToTeam(savedTeam);
-  else showScreen('screen-lobby');
+  showScreen('screen-lobby');
 
   if (isInAppBrowser()) $('inapp-banner').classList.remove('hidden');
   $('inapp-close').addEventListener('click', () => $('inapp-banner').classList.add('hidden'));
