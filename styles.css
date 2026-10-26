@@ -861,6 +861,37 @@ input:focus {
   border-color: var(--accent);
 }
 
+/* Clear (✕) button inside a text field; hidden while the field is empty */
+.clearable {
+  position: relative;
+}
+
+.clearable input {
+  padding-right: 40px;
+}
+
+.input-clear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.input-clear:active {
+  transform: none;
+}
+
+.clearable input:placeholder-shown ~ .input-clear {
+  display: none;
+}
+
 /* Athlete suggestion dropdown (custom, replaces the native datalist) */
 .athlete-field {
   position: relative;

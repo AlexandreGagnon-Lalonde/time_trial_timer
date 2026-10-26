@@ -1645,6 +1645,20 @@ function init() {
   $('roster-text').addEventListener('input', updateRosterPreview);
   $('roster-file').addEventListener('change', loadRosterFile);
 
+  // ✕ inside a field: clear it and keep typing there
+  document.addEventListener('pointerdown', e => {
+    // keep focus (and the mobile keyboard) on the field
+    if (e.target.closest('.input-clear')) e.preventDefault();
+  });
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.input-clear');
+    if (!btn) return;
+    const input = btn.parentElement.querySelector('input');
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  });
+
   // Lookup sheet
   $('lookup-overlay').addEventListener('click', closeLookup);
   $('lookup-close').addEventListener('click', closeLookup);

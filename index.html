@@ -237,19 +237,26 @@
         <div id="last" class="last">No timestamps yet.</div>
 
         <label for="operator">Operator / Station</label>
-        <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
+        <div class="clearable">
+          <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
+          <button type="button" class="input-clear" aria-label="Clear">✕</button>
+        </div>
 
         <label for="athlete">Athlete</label>
-        <div class="athlete-field">
+        <div class="athlete-field clearable">
           <input id="athlete" inputmode="text" placeholder="Example: 214" autocomplete="off" />
+          <button type="button" class="input-clear" aria-label="Clear">✕</button>
           <div id="athlete-suggest" class="athlete-suggest hidden"></div>
         </div>
 
         <label for="note">Note</label>
-        <input
-          id="note"
-          placeholder="Example: heat 3, false start, unclear ID"
-        />
+        <div class="clearable">
+          <input
+            id="note"
+            placeholder="Example: heat 3, false start, unclear ID"
+          />
+          <button type="button" class="input-clear" aria-label="Clear">✕</button>
+        </div>
 
         <div class="tablewrap">
           <table>
