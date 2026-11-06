@@ -5,6 +5,7 @@ grouped by the day it shipped. Add the line in the same commit as the change.
 
 ## 2026-11-06
 
+- Operator chip folds back whenever you leave the field, even with no edits
 - Warmer orange accent and a proper dark theme that follows the system setting
 - Spacing on a 4px grid; inputs and buttons share one height
 - Every icon button (menu, close, copy, clear) has a 44px tap area

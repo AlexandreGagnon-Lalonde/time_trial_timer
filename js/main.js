@@ -1669,7 +1669,8 @@ function init() {
     $('operator-chip').classList.remove('hidden');
     $('operator-field').classList.add('hidden');
   };
-  operator.addEventListener('change', showOperatorChip);
+  // blur, not change: leaving the field untouched must fold it too
+  operator.addEventListener('blur', showOperatorChip);
   operator.addEventListener('keydown', e => { if (e.key === 'Enter') operator.blur(); });
   $('operator-chip').addEventListener('click', () => {
     $('operator-chip').classList.add('hidden');
