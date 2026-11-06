@@ -199,7 +199,7 @@ function updateBadge(name, code, badgeId = 'room-badge') {
   const safeCode = escapeHtml(code);
   const copyBtn = `<button type="button" class="badge-copy" data-code="${safeCode}" title="Copy code" aria-label="Copy code">${COPY_ICON}</button>`;
   badge.innerHTML = name
-    ? `${escapeHtml(name)} <span class="badge-code">${safeCode}</span>${copyBtn}`
+    ? `<span class="badge-name">${escapeHtml(name)}</span><span class="badge-code">${safeCode}</span>${copyBtn}`
     : `${safeCode}${copyBtn}`;
 }
 
@@ -325,7 +325,7 @@ function applySplitsEnabled(enabled) {
   // Scoped to the button row: the hold overlay also carries a type class
   // ('split') after a press, and a bare .split query would match it first.
   document.querySelector('.buttons .split').classList.toggle('hidden', !enabled);
-  $('menu-split').textContent = enabled ? 'Disable Split Timer' : 'Enable Split Timer';
+  $('menu-split').setAttribute('aria-checked', String(enabled));
 }
 
 function toggleSplits() {
@@ -339,7 +339,7 @@ function toggleSplits() {
 // who have the 4-character code can still join as operators.
 function applyResultsHidden(hidden) {
   state.resultsHidden = hidden;
-  $('menu-hide').textContent = hidden ? 'Show Results' : 'Hide Results';
+  $('menu-hide').setAttribute('aria-checked', String(hidden));
 }
 
 function toggleResultsHidden() {
@@ -485,16 +485,14 @@ function renderRoomList(rooms) {
   `).join('');
 }
 
-// ── Join / Create switch ───────────────────────────────────────────────────
+// ── Join / Create toggle ───────────────────────────────────────────────────
 
 // The lobby and the team page each show one entry field at a time: a code
 // field in Join mode, a name field in Create mode. Join is the default, so
-// creating is always a deliberate tap.
+// creating is always a deliberate tap on the text link under the field.
 function setEntryMode(screenId, mode, focus = false) {
   const screen = $(screenId);
   screen.dataset.entry = mode;
-  screen.querySelectorAll('.entry-btn').forEach(b =>
-    b.setAttribute('aria-pressed', String(b.dataset.entry === mode)));
   if (focus) {
     const input = [...screen.querySelectorAll(`.entry-${mode} input`)].find(i => i.offsetParent !== null);
     input?.focus();
@@ -1059,8 +1057,9 @@ function logStamp(type) {
     [`rooms/${state.room}/stamps/${key}`]: rec,
     [`${indexPath(state.room, state.roomTeam)}/lastActivityAt`]: rec.epoch_ms,
   });
+  $('last').dataset.type = rec.type.toLowerCase();
   $('last').innerHTML =
-    `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete">${escapeHtml(rec.athlete) || '—'}</span>`;
+    `<span class="last-time">${stampTime(rec.epoch_ms)}</span><span class="last-athlete"><span class="last-type">${rec.type}</span>${escapeHtml(rec.athlete) || '—'}</span>`;
   if (navigator.vibrate) navigator.vibrate(35);
 }
 
@@ -1091,7 +1090,8 @@ function renderActiveRacers() {
   }
 
   el.classList.remove('hidden');
-  el.innerHTML = active.map(a => `<span class="active-racer-name" data-athlete="${escapeHtml(a)}">${escapeHtml(a)}</span>`).join(' · ');
+  el.innerHTML = '<span class="live-dot"></span>' +
+    active.map(a => `<span class="active-racer-name" data-athlete="${escapeHtml(a)}">${escapeHtml(a)}</span>`).join(' · ');
   el.querySelectorAll('.active-racer-name').forEach(span => {
     span.onclick = () => {
       $('athlete').value = span.dataset.athlete;
@@ -1123,9 +1123,9 @@ function render() {
     tr.innerHTML = `
       <td>${n}${r.editedAt ? '<span class="edited-dot"></span>' : ''}</td>
       <td>${escapeHtml(r.type)}${unmatched ? `<span class="unmatched-dot" title="${flagTitle}"></span>` : ''}</td>
+      <td class="cell-athlete">${escapeHtml(r.athlete)}</td>
       <td>${stampTime(r.epoch_ms)}</td>
-      <td>${stampDate(r.epoch_ms)}</td>
-      <td>${escapeHtml(r.athlete)}</td>
+      <td class="cell-date">${stampDate(r.epoch_ms)}</td>
       <td>${escapeHtml(r.operator)}</td>
       <td>${escapeHtml(r.note)}</td>`;
     tbody.appendChild(tr);
@@ -1572,7 +1572,7 @@ function init() {
 
   // Lobby
   $('btn-create').addEventListener('click', createRoom);
-  document.querySelectorAll('.entry-btn').forEach(btn =>
+  document.querySelectorAll('.entry-link').forEach(btn =>
     btn.addEventListener('click', () => setEntryMode(btn.closest('.screen').id, btn.dataset.entry, true)));
   $('btn-join').addEventListener('click', () => joinRoomFromInput());
   $('btn-team-join').addEventListener('click', enterTeamFromInput);
@@ -1657,6 +1657,24 @@ function init() {
     input.value = '';
     input.dispatchEvent(new Event('input'));
     input.focus();
+  });
+
+  // Operator is set once per session: after it's typed, the field folds into a
+  // chip in the header and gives the table its space back.
+  const operator = $('operator');
+  const showOperatorChip = () => {
+    const v = operator.value.trim();
+    if (!v) return;
+    $('operator-chip').textContent = v;
+    $('operator-chip').classList.remove('hidden');
+    $('operator-field').classList.add('hidden');
+  };
+  operator.addEventListener('change', showOperatorChip);
+  operator.addEventListener('keydown', e => { if (e.key === 'Enter') operator.blur(); });
+  $('operator-chip').addEventListener('click', () => {
+    $('operator-chip').classList.add('hidden');
+    $('operator-field').classList.remove('hidden');
+    operator.focus();
   });
 
   // Lookup sheet

@@ -39,15 +39,9 @@
          by name, depending on the Join/Create switch, then the list -->
     <div id="screen-lobby" class="screen" data-entry="join">
       <div class="wrap">
-        <div class="lobby-top">
-          <div class="lobby-tabs" role="tablist">
-            <button id="tab-rooms" class="lobby-tab" role="tab" data-tab="rooms">Rooms</button>
-            <button id="tab-teams" class="lobby-tab" role="tab" data-tab="teams">Teams</button>
-          </div>
-          <div class="entry-toggle" role="group" aria-label="Join or create">
-            <button type="button" class="entry-btn" data-entry="join" aria-pressed="true">Join</button>
-            <button type="button" class="entry-btn" data-entry="create" aria-pressed="false">Create</button>
-          </div>
+        <div class="lobby-tabs" role="tablist">
+          <button id="tab-rooms" class="lobby-tab" role="tab" data-tab="rooms">Rooms</button>
+          <button id="tab-teams" class="lobby-tab" role="tab" data-tab="teams">Teams</button>
         </div>
 
         <!-- Rooms: open rooms anyone can watch -->
@@ -65,6 +59,7 @@
             />
             <button id="btn-join" class="btn-join">Join</button>
           </div>
+          <button type="button" class="entry-link entry-join" data-entry="create">Create a room instead</button>
 
           <div class="lobby-create entry-create">
             <input
@@ -76,6 +71,7 @@
             />
             <button id="btn-create" class="btn-create">Create</button>
           </div>
+          <button type="button" class="entry-link entry-create" data-entry="join">Join with a code instead</button>
 
           <div class="lobby-title"><span class="live-dot"></span> Live rooms</div>
           <div id="room-list" class="room-list"></div>
@@ -86,7 +82,7 @@
           <div class="lobby-section entry-join">
             <input
               id="team-code"
-              class="code-input code-input-long"
+              class="code-input"
               maxlength="6"
               placeholder="TEAM CODE"
               autocomplete="off"
@@ -97,6 +93,7 @@
             <button id="btn-team-join" class="btn-join">Enter</button>
           </div>
           <p id="team-code-hint" class="code-hint entry-join hidden"></p>
+          <button type="button" class="entry-link entry-join" data-entry="create">Create a team instead</button>
 
           <div class="lobby-create entry-create">
             <input
@@ -108,6 +105,7 @@
             />
             <button id="btn-team-create" class="btn-create">Create</button>
           </div>
+          <button type="button" class="entry-link entry-create" data-entry="join">Join with a code instead</button>
 
           <!-- Every team's public name; this device's teams first and open directly -->
           <div class="lobby-title">All teams</div>
@@ -121,10 +119,6 @@
       <div class="wrap">
         <div class="header-row">
           <div id="team-badge" class="room-badge"></div>
-          <div class="entry-toggle" role="group" aria-label="Join or create">
-            <button type="button" class="entry-btn" data-entry="join" aria-pressed="true">Join</button>
-            <button type="button" class="entry-btn" data-entry="create" aria-pressed="false">Create</button>
-          </div>
           <div class="menu-wrapper">
             <button id="team-menu-btn" class="menu-btn">⋮</button>
             <div id="team-menu" class="room-menu">
@@ -137,6 +131,7 @@
                 <input id="team-rename-input" maxlength="40" placeholder="New team name" />
                 <button id="team-rename-save" class="rename-save">Save</button>
               </div>
+              <div class="menu-sep"></div>
               <button id="team-menu-leave" class="menu-item">Leave Team</button>
               <button id="team-menu-delete" class="menu-item danger">Delete Team</button>
             </div>
@@ -156,6 +151,7 @@
           />
           <button id="btn-team-room-join" class="btn-join">Join</button>
         </div>
+        <button type="button" class="entry-link entry-join" data-entry="create">Create a room instead</button>
 
         <div class="lobby-create entry-create">
           <input
@@ -167,6 +163,7 @@
           />
           <button id="btn-team-room-create" class="btn-create">Create</button>
         </div>
+        <button type="button" class="entry-link entry-create" data-entry="join">Join with a code instead</button>
 
         <div class="lobby-title"><span class="live-dot"></span> Team rooms</div>
         <div id="team-room-list" class="room-list"></div>
@@ -193,6 +190,8 @@
       <div class="wrap">
         <div class="header-row">
           <div id="room-badge" class="room-badge"></div>
+          <!-- The operator name, once set, lives here; tap to change it -->
+          <button id="operator-chip" class="operator-chip hidden" type="button"></button>
           <div class="menu-wrapper">
             <button id="menu-btn" class="menu-btn">⋮</button>
             <div id="room-menu" class="room-menu">
@@ -204,13 +203,16 @@
               <button id="menu-roster" class="menu-item">Import Athletes</button>
               <button id="menu-clear-roster" class="menu-item danger hidden">Clear Athlete List</button>
               <button id="menu-csv" class="menu-item">Download CSV</button>
-              <button id="menu-split" class="menu-item">Enable Split Timer</button>
-              <button id="menu-hide" class="menu-item">Hide Results</button>
+              <div class="menu-sep"></div>
+              <button id="menu-split" class="menu-item menu-toggle" role="switch" aria-checked="false">Split timer</button>
+              <button id="menu-hide" class="menu-item menu-toggle" role="switch" aria-checked="false">Hide results</button>
+              <div class="menu-sep"></div>
               <button id="menu-rename" class="menu-item">Rename Room</button>
               <div id="rename-section" class="rename-section hidden">
                 <input id="rename-input" maxlength="40" placeholder="New room name" />
                 <button id="rename-save" class="rename-save">Save</button>
               </div>
+              <div class="menu-sep"></div>
               <button id="menu-leave" class="menu-item">Leave Room</button>
               <button id="menu-delete" class="menu-item danger">Delete Room</button>
             </div>
@@ -229,17 +231,19 @@
         </div>
 
         <div class="buttons">
-          <button class="start">START</button>
-          <button class="finish">FINISH</button>
-          <button class="split hidden">SPLIT</button>
+          <button class="stamp start">START</button>
+          <button class="stamp finish">FINISH</button>
+          <button class="stamp split hidden">SPLIT</button>
         </div>
 
         <div id="last" class="last">No timestamps yet.</div>
 
-        <label for="operator">Operator / Station</label>
-        <div class="clearable">
-          <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
-          <button type="button" class="input-clear" aria-label="Clear">✕</button>
+        <div id="operator-field">
+          <label for="operator">Operator / Station</label>
+          <div class="clearable">
+            <input id="operator" placeholder="Example: Start 1, Finish 2, Matt" />
+            <button type="button" class="input-clear" aria-label="Clear">✕</button>
+          </div>
         </div>
 
         <label for="athlete">Athlete</label>
@@ -264,9 +268,9 @@
               <tr>
                 <th>#</th>
                 <th>Type</th>
-                <th>Time</th>
-                <th>Date</th>
                 <th>Athlete</th>
+                <th>Time</th>
+                <th class="cell-date">Date</th>
                 <th>Operator</th>
                 <th>Note</th>
               </tr>

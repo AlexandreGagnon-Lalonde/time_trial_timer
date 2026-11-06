@@ -12,6 +12,7 @@
         ".gitignore",
         "firebase.example.js",
         "database.rules.json",
+        "design-review/**",
         "**/.*",
         "**/.*/**"
       ],
@@ -39,6 +40,7 @@
         ".gitignore",
         "firebase.example.js",
         "database.rules.json",
+        "design-review/**",
         "**/.*",
         "**/.*/**"
       ],
