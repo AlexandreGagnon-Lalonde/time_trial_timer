@@ -26,8 +26,33 @@ firebase login
 ```
 
 3. Make sure `firebase.js` exists in the folder. It is gitignored, so a fresh
-   clone will not have it. Copy `firebase.example.js` to `firebase.js` and fill
-   in the project's web config from the Firebase console.
+   clone will not have it. See the next section to get it back.
+
+## If `firebase.js` is missing
+
+It holds the project's web config (API key, database URL, app id). That config
+is not a secret: every visitor's browser downloads it, and access is enforced
+by `database.rules.json`, not by hiding the file. So it can be recovered from
+three places, quickest first:
+
+1. **From the live site.** The deployed copy is identical to the local one:
+
+   ```bash
+   curl -s https://gl-timer.web.app/firebase.js -o firebase.js
+   ```
+
+2. **From the CLI**, which prints the same values. Paste them into a copy of
+   `firebase.example.js`, keeping the two lines at the bottom:
+
+   ```bash
+   PATH="$HOME/.nvm/versions/node/v20.19.0/bin:$PATH" firebase apps:sdkconfig web
+   ```
+
+3. **From the console.** Firebase console → Project settings → Your apps →
+   the web app → "SDK setup and configuration" → Config.
+
+Keep it out of git. Deploying with a wrong or missing `firebase.js` ships a
+site that cannot reach the database.
 
 ## Deploy
 
